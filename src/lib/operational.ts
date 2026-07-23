@@ -18,11 +18,10 @@ export interface OperationalParams {
 
 export const DEFAULT_OPERATIONAL_ITEMS: OperationalItem[] = [
   // INFRA
-  { id: "vps", label: "VPS (hospeda n8n)", category: "infra", enabled: true, monthlyValue: 150 },
-  { id: "supabase", label: "Supabase (banco)", category: "infra", enabled: true, monthlyValue: 0 },
-  { id: "uazapi", label: "Uazapi (WhatsApp API)", category: "infra", enabled: true, monthlyValue: 80 },
-  { id: "redis", label: "Redis (cache n8n)", category: "infra", enabled: true, monthlyValue: 0 },
-  { id: "domain", label: "Domínio + SSL", category: "infra", enabled: true, monthlyValue: 5 },
+  { id: "vps", label: "VPS (hospeda n8n)", category: "infra", enabled: true, monthlyValue: 149.99 },
+  { id: "supabase", label: "Supabase (banco)", category: "infra", enabled: true, monthlyValue: 127.75 },
+  { id: "uazapi", label: "Uazapi (WhatsApp API)", category: "infra", enabled: true, monthlyValue: 38 },
+  { id: "redis", label: "Redis (cache n8n)", category: "infra", enabled: true, monthlyValue: 51.10 },
   // MÃO DE OBRA MENSAL
   { id: "maintenance", label: "Manutenção mensal", category: "labor", enabled: true, monthlyValue: 800 },
   // SETUP ÚNICO (one-time)

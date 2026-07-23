@@ -3914,13 +3914,13 @@ Como posso te ajudar hoje?`
                     </div>
                   </div>
 
-                  {/* SEÇÃO 3: MÃO DE OBRA & SETUP */}
+                  {/* SEÇÃO 3: IMPLEMENTAÇÃO */}
                   <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                       <div className="flex items-center gap-2">
                         <Wrench className="h-4 w-4 text-purple-400" />
                         <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                          🔧 Mão de Obra & Setup
+                          🔧 Implementação
                         </h4>
                       </div>
                       <span className="text-xs font-mono font-bold text-purple-400">
