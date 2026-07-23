@@ -290,7 +290,7 @@ export default function App() {
 
   // Inputs e Defaults da Simulação
   const [activeMainTab, setActiveMainTab] = useState<"simulator" | "import" | "presets" | "details" | "faq" | "chat">("simulator");
-  const [selectedModelId, setSelectedModelId] = useState("gemini-3-1-flash-lite");
+  const [selectedModelId, setSelectedModelId] = useState("gemini-3-5-flash-lite");
   const [selectedTier, setSelectedTier] = useState<"standard" | "batch" | "flex" | "priority">("standard");
   const [leads, setLeads] = useState<number>(16);
 
@@ -607,7 +607,7 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
   // Parâmetros de Otimização e Realidade do Fluxo (Supabase & Cache)
     const [supabaseToolsSize, setSupabaseToolsSize] = useState<number>(5000); // Funções/tools e payloads adicionais do Supabase no prompt (em chars)
   const [avgSdrMsgs, setAvgSdrMsgs] = useState<number>(15); // Número médio de interações reais que o lead de fato faz no SDR
-  const [sdrToolLoopFactor, setSdrToolLoopFactor] = useState<number>(1.5); // Factor de tool-loop/raciocínio (default 1.5x)
+  const [sdrToolLoopFactor, setSdrToolLoopFactor] = useState<number>(3.0); // Factor de tool-loop/raciocínio (default 3.0x)
   const [useSafetyMargin, setUseSafetyMargin] = useState<boolean>(true); // Margem de segurança / contingência
   const [safetyMarginPct, setSafetyMarginPct] = useState<number>(30); // 30% de margem
   const [activeFollowupsPerDay, setActiveFollowupsPerDay] = useState<number>(500); // Leads que recebem follow-up ativo diariamente (ex: 500)
@@ -1714,7 +1714,7 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                           onChange={(e) => setSdrToolLoopFactor(parseFloat(e.target.value))}
                           className="w-full accent-emerald-500 cursor-pointer"
                         />
-                        <p className="text-[10px] text-slate-400">Iterações médias do agente SDR por mensagem (default 1.5x).</p>
+                        <p className="text-[10px] text-slate-400">Iterações médias do agente SDR por mensagem (default 3.0x).</p>
                       </div>
 
                       {/* Contingency / Safety Margin */}

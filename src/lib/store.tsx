@@ -94,6 +94,7 @@ const INITIAL_MODELS: CatalogModel[] = [
   { id: "m-claude-3-haiku", providerId: "p-anthropic", name: "Claude 3 Haiku", inputPricePer1M: 0.25, outputPricePer1M: 1.25, contextWindow: 200000, modality: "text+vision" },
 
   // Google
+  { id: "m-gemini-35-flash-lite", providerId: "p-google", name: "Gemini 3.5 Flash-Lite", inputPricePer1M: 0.30, outputPricePer1M: 2.50, contextWindow: 1000000, modality: "text+vision+audio" },
   { id: "m-gemini-31-flash-lite", providerId: "p-google", name: "Gemini 3.1 Flash-Lite", inputPricePer1M: 0.25, outputPricePer1M: 1.50, contextWindow: 1000000, modality: "text+vision+audio" },
   { id: "m-gemini-15-pro", providerId: "p-google", name: "Gemini 1.5 Pro", inputPricePer1M: 1.25, outputPricePer1M: 5.0, contextWindow: 2000000, modality: "text+vision+audio" },
   { id: "m-gemini-15-flash", providerId: "p-google", name: "Gemini 1.5 Flash", inputPricePer1M: 0.075, outputPricePer1M: 0.30, contextWindow: 1000000, modality: "text+vision+audio" },
@@ -121,7 +122,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currency, setCurrency] = useState<Currency>("BRL");
   const [usdToBrl, setUsdToBrl] = useState<number>(DEFAULT_USD_TO_BRL);
   const [params, setParamsState] = useState<SimulationParams>({ ...DEFAULT_PARAMS });
-  const [selectedModelLabel, setSelectedModelLabel] = useState<string | null>("p-google||m-gemini-31-flash-lite");
+  const [selectedModelLabel, setSelectedModelLabel] = useState<string | null>("p-google||m-gemini-35-flash-lite");
 
   const [providers, setProviders] = useState<CatalogProvider[]>(INITIAL_PROVIDERS);
   const [models, setModels] = useState<CatalogModel[]>(INITIAL_MODELS);
