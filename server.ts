@@ -4,10 +4,11 @@ import { createServer as createViteServer } from "vite";
 import { GoogleGenAI } from "@google/genai";
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
 
-// Middleware to parse JSON
-app.use(express.json());
+// Middleware to parse JSON with increased size limit for attached files/images
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb", extended: true }));
 
 // Lazy-initialized Gemini client
 let aiClient: GoogleGenAI | null = null;
@@ -206,9 +207,25 @@ Responda sempre em português brasileiro de forma amigável, clara e focada em r
     console.error("Erro na API /api/chat:", error);
     res.status(500).json({
       error: "Erro ao processar conversa com a IA.",
-      details: error.message
+      details: error.message || String(error)
     });
   }
+});
+
+// Express error handling middleware for payload limits and uncaught route errors
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  console.error("Express Error Handler:", err);
+  if (err.type === "entity.too.large" || err.status === 413) {
+    res.status(413).json({
+      error: "Arquivo(s) muito grande(s) para envio.",
+      details: "Tente enviar imagens menores ou menos arquivos de uma vez."
+    });
+    return;
+  }
+  res.status(err.status || 500).json({
+    error: err.message || "Erro interno do servidor.",
+    details: err.stack || ""
+  });
 });
 
 // Setup development or production build flows

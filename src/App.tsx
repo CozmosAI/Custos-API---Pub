@@ -321,17 +321,71 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
 
     const filePromises = Array.from(selectedFiles).map((file) => {
       return new Promise<{ name: string; data: string; mimeType: string }>((resolve) => {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          const result = event.target?.result as string;
-          const base64 = result.split(',')[1];
-          resolve({
-            name: file.name,
-            data: base64,
-            mimeType: file.type || 'application/octet-stream'
-          });
-        };
-        reader.readAsDataURL(file);
+        if (file.type.startsWith("image/")) {
+          const img = new Image();
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            img.src = event.target?.result as string;
+            img.onload = () => {
+              const canvas = document.createElement("canvas");
+              const MAX_DIM = 1600;
+              let width = img.width;
+              let height = img.height;
+
+              if (width > MAX_DIM || height > MAX_DIM) {
+                if (width > height) {
+                  height = Math.round((height * MAX_DIM) / width);
+                  width = MAX_DIM;
+                } else {
+                  width = Math.round((width * MAX_DIM) / height);
+                  height = MAX_DIM;
+                }
+              }
+
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext("2d");
+              if (ctx) {
+                ctx.drawImage(img, 0, 0, width, height);
+                const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+                const base64 = dataUrl.split(",")[1];
+                resolve({
+                  name: file.name,
+                  data: base64,
+                  mimeType: "image/jpeg"
+                });
+                return;
+              }
+              const rawBase64 = (event.target?.result as string).split(",")[1];
+              resolve({
+                name: file.name,
+                data: rawBase64,
+                mimeType: file.type || "image/jpeg"
+              });
+            };
+            img.onerror = () => {
+              const rawBase64 = (event.target?.result as string).split(",")[1];
+              resolve({
+                name: file.name,
+                data: rawBase64,
+                mimeType: file.type || "image/jpeg"
+              });
+            };
+          };
+          reader.readAsDataURL(file);
+        } else {
+          const reader = new FileReader();
+          reader.onload = (event) => {
+            const result = event.target?.result as string;
+            const base64 = result.split(',')[1];
+            resolve({
+              name: file.name,
+              data: base64,
+              mimeType: file.type || 'application/octet-stream'
+            });
+          };
+          reader.readAsDataURL(file);
+        }
       });
     });
 
@@ -407,10 +461,19 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
       });
 
       if (!response.ok) {
-        let errorMsg = "Erro na resposta do servidor.";
+        let errorMsg = `Servidor retornou código ${response.status}`;
         try {
-          const errData = await response.json();
-          if (errData.error) errorMsg = errData.error + (errData.details ? ` (${errData.details})` : "");
+          const rawText = await response.text();
+          try {
+            const errData = JSON.parse(rawText);
+            if (errData.error) {
+              errorMsg = errData.error + (errData.details ? `: ${errData.details}` : "");
+            }
+          } catch (_) {
+            if (rawText) {
+              errorMsg = rawText.slice(0, 300);
+            }
+          }
         } catch (_) {}
         throw new Error(errorMsg);
       }
@@ -419,11 +482,15 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
       setChatMessages(prev => [...prev, { role: "assistant", content: data.reply || "Desculpe, não consegui processar sua solicitação." }]);
     } catch (err: any) {
       console.error(err);
+      const isKeyError = err.message && (err.message.includes("GEMINI_API_KEY") || err.message.includes("apiKey"));
+      const helpNote = isKeyError 
+        ? "\n\n*Nota: Se a variável GEMINI_API_KEY estiver ausente no Render, adicione-a no painel do seu serviço.*"
+        : "";
       setChatMessages(prev => [
         ...prev,
         {
           role: "assistant",
-          content: `❌ **Erro na API**: ${err.message || "Não foi possível falar com o servidor."}\n\n*Se você está rodando no Render ou em outro servidor de hospedagem, adicione a variável de ambiente **GEMINI_API_KEY** no painel do seu serviço.*`
+          content: `❌ **Erro**: ${err.message || "Não foi possível falar com o servidor."}${helpNote}`
         }
       ]);
     } finally {
