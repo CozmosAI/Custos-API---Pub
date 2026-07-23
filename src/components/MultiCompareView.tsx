@@ -29,7 +29,6 @@ export const MultiCompareView: React.FC = () => {
         color: provider?.color || "#888",
         inputPricePer1M: m.inputPricePer1M,
         outputPricePer1M: m.outputPricePer1M,
-        cacheDiscount: m.cacheDiscount,
         modality: m.modality
       };
     });
@@ -55,8 +54,6 @@ export const MultiCompareView: React.FC = () => {
         ...params,
         inputPricePer1M: m.inputPricePer1M,
         outputPricePer1M: m.outputPricePer1M,
-        cacheDiscount: m.cacheDiscount,
-        useCache: m.cacheDiscount > 0
       };
       const result = simulate(simParams);
       return { model: m, result };

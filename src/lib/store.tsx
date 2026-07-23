@@ -18,7 +18,6 @@ export interface CatalogModel {
   name: string;
   inputPricePer1M: number;
   outputPricePer1M: number;
-  cacheDiscount: number;
   contextWindow: number | null;
   modality: string;
 }
@@ -59,7 +58,7 @@ interface AppContextType {
   models: CatalogModel[];
   addCustomModel: (m: Omit<CatalogModel, "id">) => void;
   addCustomProvider: (p: Omit<CatalogProvider, "id">) => void;
-  updateModelPrice: (id: string, updates: { inputPricePer1M: number; outputPricePer1M: number; cacheDiscount: number }) => void;
+  updateModelPrice: (id: string, updates: { inputPricePer1M: number; outputPricePer1M: number }) => void;
 
   // Cenários
   scenarios: SavedScenario[];
@@ -82,40 +81,39 @@ const INITIAL_PROVIDERS: CatalogProvider[] = [
 
 const INITIAL_MODELS: CatalogModel[] = [
   // OpenAI
-  { id: "m-gpt-4o", providerId: "p-openai", name: "GPT-4o", inputPricePer1M: 2.5, outputPricePer1M: 10.0, cacheDiscount: 0.50, contextWindow: 128000, modality: "text+vision" },
-  { id: "m-gpt-4o-mini", providerId: "p-openai", name: "GPT-4o mini", inputPricePer1M: 0.15, outputPricePer1M: 0.60, cacheDiscount: 0.50, contextWindow: 128000, modality: "text+vision" },
-  { id: "m-o1", providerId: "p-openai", name: "o1", inputPricePer1M: 15.0, outputPricePer1M: 60.0, cacheDiscount: 0.50, contextWindow: 200000, modality: "text" },
-  { id: "m-o3-mini", providerId: "p-openai", name: "o3-mini", inputPricePer1M: 1.1, outputPricePer1M: 4.4, cacheDiscount: 0.50, contextWindow: 200000, modality: "text" },
-  { id: "m-gpt-35", providerId: "p-openai", name: "GPT-3.5 Turbo", inputPricePer1M: 0.50, outputPricePer1M: 1.50, cacheDiscount: 0.50, contextWindow: 16385, modality: "text" },
+  { id: "m-gpt-4o", providerId: "p-openai", name: "GPT-4o", inputPricePer1M: 2.5, outputPricePer1M: 10.0, contextWindow: 128000, modality: "text+vision" },
+  { id: "m-gpt-4o-mini", providerId: "p-openai", name: "GPT-4o mini", inputPricePer1M: 0.15, outputPricePer1M: 0.60, contextWindow: 128000, modality: "text+vision" },
+  { id: "m-o1", providerId: "p-openai", name: "o1", inputPricePer1M: 15.0, outputPricePer1M: 60.0, contextWindow: 200000, modality: "text" },
+  { id: "m-o3-mini", providerId: "p-openai", name: "o3-mini", inputPricePer1M: 1.1, outputPricePer1M: 4.4, contextWindow: 200000, modality: "text" },
+  { id: "m-gpt-35", providerId: "p-openai", name: "GPT-3.5 Turbo", inputPricePer1M: 0.50, outputPricePer1M: 1.50, contextWindow: 16385, modality: "text" },
 
   // Anthropic
-  { id: "m-claude-35-sonnet", providerId: "p-anthropic", name: "Claude 3.5 Sonnet", inputPricePer1M: 3.0, outputPricePer1M: 15.0, cacheDiscount: 0.90, contextWindow: 200000, modality: "text+vision" },
-  { id: "m-claude-35-haiku", providerId: "p-anthropic", name: "Claude 3.5 Haiku", inputPricePer1M: 0.80, outputPricePer1M: 4.0, cacheDiscount: 0.90, contextWindow: 200000, modality: "text+vision" },
-  { id: "m-claude-3-opus", providerId: "p-anthropic", name: "Claude 3 Opus", inputPricePer1M: 15.0, outputPricePer1M: 75.0, cacheDiscount: 0.90, contextWindow: 200000, modality: "text+vision" },
-  { id: "m-claude-3-haiku", providerId: "p-anthropic", name: "Claude 3 Haiku", inputPricePer1M: 0.25, outputPricePer1M: 1.25, cacheDiscount: 0.90, contextWindow: 200000, modality: "text+vision" },
+  { id: "m-claude-35-sonnet", providerId: "p-anthropic", name: "Claude 3.5 Sonnet", inputPricePer1M: 3.0, outputPricePer1M: 15.0, contextWindow: 200000, modality: "text+vision" },
+  { id: "m-claude-35-haiku", providerId: "p-anthropic", name: "Claude 3.5 Haiku", inputPricePer1M: 0.80, outputPricePer1M: 4.0, contextWindow: 200000, modality: "text+vision" },
+  { id: "m-claude-3-opus", providerId: "p-anthropic", name: "Claude 3 Opus", inputPricePer1M: 15.0, outputPricePer1M: 75.0, contextWindow: 200000, modality: "text+vision" },
+  { id: "m-claude-3-haiku", providerId: "p-anthropic", name: "Claude 3 Haiku", inputPricePer1M: 0.25, outputPricePer1M: 1.25, contextWindow: 200000, modality: "text+vision" },
 
   // Google
-  { id: "m-gemini-15-pro", providerId: "p-google", name: "Gemini 1.5 Pro", inputPricePer1M: 1.25, outputPricePer1M: 5.0, cacheDiscount: 0.75, contextWindow: 2000000, modality: "text+vision+audio" },
-  { id: "m-gemini-15-flash", providerId: "p-google", name: "Gemini 1.5 Flash", inputPricePer1M: 0.075, outputPricePer1M: 0.30, cacheDiscount: 0.75, contextWindow: 1000000, modality: "text+vision+audio" },
-  { id: "m-gemini-20-flash", providerId: "p-google", name: "Gemini 2.0 Flash", inputPricePer1M: 0.10, outputPricePer1M: 0.40, cacheDiscount: 0.75, contextWindow: 1000000, modality: "text+vision+audio" },
-  { id: "m-gemini-20-flash-lite", providerId: "p-google", name: "Gemini 2.0 Flash-Lite", inputPricePer1M: 0.075, outputPricePer1M: 0.30, cacheDiscount: 0.75, contextWindow: 1000000, modality: "text+vision" },
+  { id: "m-gemini-31-flash-lite", providerId: "p-google", name: "Gemini 3.1 Flash-Lite", inputPricePer1M: 0.25, outputPricePer1M: 1.50, contextWindow: 1000000, modality: "text+vision+audio" },
+  { id: "m-gemini-15-pro", providerId: "p-google", name: "Gemini 1.5 Pro", inputPricePer1M: 1.25, outputPricePer1M: 5.0, contextWindow: 2000000, modality: "text+vision+audio" },
+  { id: "m-gemini-15-flash", providerId: "p-google", name: "Gemini 1.5 Flash", inputPricePer1M: 0.075, outputPricePer1M: 0.30, contextWindow: 1000000, modality: "text+vision+audio" },
+  { id: "m-gemini-20-flash", providerId: "p-google", name: "Gemini 2.0 Flash", inputPricePer1M: 0.10, outputPricePer1M: 0.40, contextWindow: 1000000, modality: "text+vision+audio" },
+  { id: "m-gemini-20-flash-lite", providerId: "p-google", name: "Gemini 2.0 Flash-Lite", inputPricePer1M: 0.075, outputPricePer1M: 0.30, contextWindow: 1000000, modality: "text+vision" },
 
   // Mistral
-  { id: "m-mistral-large", providerId: "p-mistral", name: "Mistral Large", inputPricePer1M: 2.0, outputPricePer1M: 6.0, cacheDiscount: 0, contextWindow: 128000, modality: "text" },
-  { id: "m-mistral-small", providerId: "p-mistral", name: "Mistral Small", inputPricePer1M: 0.20, outputPricePer1M: 0.60, cacheDiscount: 0, contextWindow: 32000, modality: "text" },
-  { id: "m-codestral", providerId: "p-mistral", name: "Codestral", inputPricePer1M: 0.30, outputPricePer1M: 0.90, cacheDiscount: 0, contextWindow: 32000, modality: "text" },
+  { id: "m-mistral-large", providerId: "p-mistral", name: "Mistral Large", inputPricePer1M: 2.0, outputPricePer1M: 6.0, contextWindow: 128000, modality: "text" },
+  { id: "m-mistral-small", providerId: "p-mistral", name: "Mistral Small", inputPricePer1M: 0.20, outputPricePer1M: 0.60, contextWindow: 32000, modality: "text" },
 
   // DeepSeek
-  { id: "m-deepseek-v3", providerId: "p-deepseek", name: "DeepSeek-V3", inputPricePer1M: 0.27, outputPricePer1M: 1.10, cacheDiscount: 0, contextWindow: 64000, modality: "text" },
-  { id: "m-deepseek-r1", providerId: "p-deepseek", name: "DeepSeek-R1", inputPricePer1M: 0.55, outputPricePer1M: 2.19, cacheDiscount: 0, contextWindow: 64000, modality: "text" },
+  { id: "m-deepseek-v3", providerId: "p-deepseek", name: "DeepSeek-V3", inputPricePer1M: 0.27, outputPricePer1M: 1.10, contextWindow: 64000, modality: "text" },
+  { id: "m-deepseek-r1", providerId: "p-deepseek", name: "DeepSeek-R1", inputPricePer1M: 0.55, outputPricePer1M: 2.19, contextWindow: 64000, modality: "text" },
 
   // Meta
-  { id: "m-llama-33-70b", providerId: "p-meta", name: "Llama 3.3 70B", inputPricePer1M: 0.88, outputPricePer1M: 0.88, cacheDiscount: 0, contextWindow: 128000, modality: "text" },
-  { id: "m-llama-31-8b", providerId: "p-meta", name: "Llama 3.1 8B", inputPricePer1M: 0.18, outputPricePer1M: 0.18, cacheDiscount: 0, contextWindow: 128000, modality: "text" },
+  { id: "m-llama-33-70b", providerId: "p-meta", name: "Llama 3.3 70B", inputPricePer1M: 0.88, outputPricePer1M: 0.88, contextWindow: 128000, modality: "text" },
+  { id: "m-llama-31-8b", providerId: "p-meta", name: "Llama 3.1 8B", inputPricePer1M: 0.18, outputPricePer1M: 0.18, contextWindow: 128000, modality: "text" },
 
   // Groq
-  { id: "m-llama-33-groq", providerId: "p-groq", name: "Llama 3.3 70B (Groq)", inputPricePer1M: 0.59, outputPricePer1M: 0.79, cacheDiscount: 0, contextWindow: 128000, modality: "text" },
-  { id: "m-llama-31-8b-groq", providerId: "p-groq", name: "Llama 3.1 8B (Groq)", inputPricePer1M: 0.05, outputPricePer1M: 0.08, cacheDiscount: 0, contextWindow: 128000, modality: "text" }
+  { id: "m-llama-33-groq", providerId: "p-groq", name: "Llama 3.3 70B (Groq)", inputPricePer1M: 0.59, outputPricePer1M: 0.79, contextWindow: 128000, modality: "text" }
 ];
 
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -123,17 +121,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currency, setCurrency] = useState<Currency>("BRL");
   const [usdToBrl, setUsdToBrl] = useState<number>(DEFAULT_USD_TO_BRL);
   const [params, setParamsState] = useState<SimulationParams>({ ...DEFAULT_PARAMS });
-  const [selectedModelLabel, setSelectedModelLabel] = useState<string | null>("p-openai||m-gpt-4o");
+  const [selectedModelLabel, setSelectedModelLabel] = useState<string | null>("p-google||m-gemini-31-flash-lite");
 
-  // Persistidos no localStorage
   const [providers, setProviders] = useState<CatalogProvider[]>(INITIAL_PROVIDERS);
   const [models, setModels] = useState<CatalogModel[]>(INITIAL_MODELS);
   const [scenarios, setScenarios] = useState<SavedScenario[]>([]);
 
-  // Carregar dados salvos no primeiro render
   useEffect(() => {
-    const savedCurrency = localStorage.getItem("custoia_currency");
-    if (savedCurrency) setCurrency(savedCurrency as Currency);
+    const savedCurrency = localStorage.getItem("custoia_currency") as Currency | null;
+    if (savedCurrency) setCurrency(savedCurrency);
 
     const savedUsdToBrl = localStorage.getItem("custoia_usd_to_brl");
     if (savedUsdToBrl) setUsdToBrl(parseFloat(savedUsdToBrl));
@@ -141,46 +137,33 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const savedParams = localStorage.getItem("custoia_params");
     if (savedParams) {
       try {
-        setParamsState({ ...DEFAULT_PARAMS, ...JSON.parse(savedParams) });
+        setParamsState(JSON.parse(savedParams));
       } catch (e) {
         console.error(e);
       }
     }
 
     const savedModelLabel = localStorage.getItem("custoia_model_label");
-    if (savedModelLabel !== null) {
-      setSelectedModelLabel(savedModelLabel === "null" ? null : savedModelLabel);
+    if (savedModelLabel && savedModelLabel !== "null") {
+      setSelectedModelLabel(savedModelLabel);
     }
 
     const savedProviders = localStorage.getItem("custoia_providers");
     if (savedProviders) {
-      try {
-        setProviders(JSON.parse(savedProviders));
-      } catch (e) {
-        console.error(e);
-      }
+      try { setProviders(JSON.parse(savedProviders)); } catch (e) { console.error(e); }
     }
 
     const savedModels = localStorage.getItem("custoia_models");
     if (savedModels) {
-      try {
-        setModels(JSON.parse(savedModels));
-      } catch (e) {
-        console.error(e);
-      }
+      try { setModels(JSON.parse(savedModels)); } catch (e) { console.error(e); }
     }
 
     const savedScenarios = localStorage.getItem("custoia_scenarios");
     if (savedScenarios) {
-      try {
-        setScenarios(JSON.parse(savedScenarios));
-      } catch (e) {
-        console.error(e);
-      }
+      try { setScenarios(JSON.parse(savedScenarios)); } catch (e) { console.error(e); }
     }
   }, []);
 
-  // Helpers de gravação
   const setParams = (newParams: Partial<SimulationParams>) => {
     setParamsState((prev) => {
       const updated = { ...prev, ...newParams };
@@ -190,10 +173,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetParams = () => {
-    setParamsState(DEFAULT_PARAMS);
-    setSelectedModelLabel("p-openai||m-gpt-4o");
-    localStorage.setItem("custoia_params", JSON.stringify(DEFAULT_PARAMS));
-    localStorage.setItem("custoia_model_label", "p-openai||m-gpt-4o");
+    setParamsState({ ...DEFAULT_PARAMS });
+    localStorage.removeItem("custoia_params");
   };
 
   const updateSelectedModelLabel = (label: string | null) => {
@@ -211,7 +192,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     localStorage.setItem("custoia_usd_to_brl", rate.toString());
   };
 
-  // Funções do Catálogo
   const addCustomModel = (newModel: Omit<CatalogModel, "id">) => {
     const id = `custom-m-${Date.now()}`;
     const model: CatalogModel = { ...newModel, id };
@@ -232,7 +212,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  const updateModelPrice = (id: string, updates: { inputPricePer1M: number; outputPricePer1M: number; cacheDiscount: number }) => {
+  const updateModelPrice = (id: string, updates: { inputPricePer1M: number; outputPricePer1M: number }) => {
     setModels((prev) => {
       const updated = prev.map((m) => (m.id === id ? { ...m, ...updates } : m));
       localStorage.setItem("custoia_models", JSON.stringify(updated));
@@ -240,7 +220,6 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     });
   };
 
-  // Funções de Cenários
   const saveScenario = (name: string, modelName: string | null) => {
     const scenario: SavedScenario = {
       id: `sc-${Date.now()}`,

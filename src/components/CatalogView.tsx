@@ -24,7 +24,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
   // States para edição
   const [editInput, setEditInput] = useState(0);
   const [editOutput, setEditOutput] = useState(0);
-  const [editCache, setEditCache] = useState(0);
 
   // States para criação
   const [isAdding, setIsAdding] = useState(false);
@@ -32,7 +31,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
   const [newProviderId, setNewProviderId] = useState("");
   const [newInput, setNewInput] = useState(0.5);
   const [newOutput, setNewOutput] = useState(1.5);
-  const [newCache, setNewCache] = useState(0);
   const [newContext, setNewContext] = useState(128000);
   const [newModality, setNewModality] = useState("text");
 
@@ -54,7 +52,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
     setEditingModel(model);
     setEditInput(model.inputPricePer1M);
     setEditOutput(model.outputPricePer1M);
-    setEditCache(Math.round(model.cacheDiscount * 100));
   };
 
   const handleSaveEdit = () => {
@@ -62,7 +59,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
     updateModelPrice(editingModel.id, {
       inputPricePer1M: editInput,
       outputPricePer1M: editOutput,
-      cacheDiscount: editCache / 100
     });
     setEditingModel(null);
   };
@@ -76,7 +72,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
       name: newName,
       inputPricePer1M: newInput,
       outputPricePer1M: newOutput,
-      cacheDiscount: newCache / 100,
       contextWindow: newContext > 0 ? newContext : null,
       modality: newModality
     });
@@ -85,7 +80,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
     setNewName("");
     setNewInput(0.5);
     setNewOutput(1.5);
-    setNewCache(0);
     setNewContext(128000);
     setNewModality("text");
     setIsAdding(false);
@@ -161,15 +155,6 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
                       >
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <span className="font-bold text-xs text-gray-200 group-hover:text-primary transition-colors truncate">{m.name}</span>
-                          {m.cacheDiscount > 0 && (
-                            <span 
-                              className="inline-flex items-center gap-0.5 bg-emerald-950 text-emerald-400 text-[8px] font-extrabold px-1.5 py-0.5 rounded-full"
-                              title={`Suporte a Prompt Caching de até ${(m.cacheDiscount * 100).toFixed(0)}%`}
-                            >
-                              <Zap className="h-2 w-2" />
-                              {(m.cacheDiscount * 100).toFixed(0)}%
-                            </span>
-                          )}
                         </div>
                         <p className="text-[9px] text-gray-500 font-bold uppercase">
                           {m.modality} {m.contextWindow ? `· ctx ${formatNumber(m.contextWindow)}` : ""}
@@ -230,16 +215,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
                 />
               </div>
 
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-semibold">Prompt Caching (%)</label>
-                <input
-                  type="number"
-                  value={editCache}
-                  onChange={(e) => setEditCache(Math.min(95, Math.max(0, parseInt(e.target.value) || 0)))}
-                  step="1"
-                  className="w-full h-9 bg-gray-900 border border-gray-800 focus:border-primary text-gray-200 text-xs font-semibold px-2 rounded-lg focus:outline-none"
-                />
-              </div>
+
             </div>
 
             <div className="flex gap-2 justify-end pt-2">
@@ -322,17 +298,7 @@ export const CatalogView: React.FC<CatalogViewProps> = ({ onPickModel }) => {
               </div>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1">
-                <label className="text-xs text-gray-400 font-semibold">Cache %</label>
-                <input
-                  type="number"
-                  value={newCache}
-                  onChange={(e) => setNewCache(Math.min(95, Math.max(0, parseInt(e.target.value) || 0)))}
-                  className="w-full h-9 bg-gray-900 border border-gray-800 focus:border-primary text-gray-200 text-xs font-semibold px-2 rounded-lg focus:outline-none"
-                />
-              </div>
-
+            <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <label className="text-xs text-gray-400 font-semibold">Contexto (Tokens)</label>
                 <input

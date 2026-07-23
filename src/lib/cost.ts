@@ -1,99 +1,324 @@
-// Motor de cálculo de custo de IA por lead/conversa
-// Modelo: tokens acumulados (histórico cresce a cada mensagem)
+// Motor de cálculo de custo de IA por lead/conversa (SDR + Follow-Up)
+// Fonte Única de Verdade de Cálculo
+
+import { SDRPreset, REAL_RESGATA_PRESET } from "./presets";
 
 export type Period = "day" | "week" | "month";
 
+export interface FlowParams {
+  modelId: string;
+  inputPricePer1M: number;
+  outputPricePer1M: number;
+  
+  // Volume
+  leadsPorDia: number;
+  diasNoMes: number;
+  
+  // SDR
+  sdrMessagesPerLead: number;
+  sdrSystemChars: number;
+  sdrFunctionDeclsChars: number;
+  sdrHistoryChars: number;
+  sdrOutputChars: number;
+  sdrFracionaChars: number;
+  sdrHandoffChars: number;
+  sdrToolLoopFactor: number;
+  audioMessageRate: number;
+  handoffRate: number;
+  fallbackRate: number;
+  
+  // Follow
+  followRate: number;
+  followDays: number;
+  followIaDays: number;
+  followMessagesPerDay: number;
+  followSystemChars: number;
+  followFracionaChars: number;
+  followHistoryChars: number;
+  followOutputChars: number;
+  repeatedMessageRate: number;
+  
+  // Câmbio & Contingência
+  usdToBrl: number;
+  iofRate: number;
+  safetyMarginEnabled: boolean;
+  safetyMargin: number;
+}
+
+export interface FlowResult {
+  effectiveUsdBrl: number;
+  
+  // Tokens por Chamada
+  sdrAgentInputTokens: number;
+  sdrAgentOutputTokens: number;
+  sdrFracionaInputTokens: number;
+  sdrFracionaOutputTokens: number;
+  sdrHandoffInputTokens: number;
+  sdrHandoffOutputTokens: number;
+  
+  followAgentInputTokens: number;
+  followAgentOutputTokens: number;
+  followFracionaInputTokens: number;
+  followFracionaOutputTokens: number;
+
+  // Custos unitários Base (USD e BRL)
+  sdrMessageCostUsdBase: number;
+  sdrMessageCostBrlBase: number;
+  
+  sdrHandoffCostUsdBase: number;
+  sdrHandoffCostBrlBase: number;
+  
+  sdrLeadCostUsdBase: number;
+  sdrLeadCostBrlBase: number;
+  
+  followMessageCostUsdBase: number;
+  followMessageCostBrlBase: number;
+  
+  followLeadCostUsdBase: number;
+  followLeadCostBrlBase: number;
+
+  totalLeadCostUsdBase: number;
+  totalLeadCostBrlBase: number;
+
+  // Totais Mensais Base
+  totalLeadsPerMonth: number;
+  sdrMonthlyCostBrlBase: number;
+  followMonthlyCostBrlBase: number;
+  totalMonthlyCostBrlBase: number;
+
+  // Totais Mensais Com Margem de Segurança
+  safetyMarginMultiplier: number;
+  followIaMsgsPerLead: number;
+  sdrMessageCostBrlWithMargin: number;
+  sdrLeadCostBrlWithMargin: number;
+  followMessageCostBrlWithMargin: number;
+  followLeadCostBrlWithMargin: number;
+  totalLeadCostBrlWithMargin: number;
+  
+  sdrMonthlyCostBrlWithMargin: number;
+  followMonthlyCostBrlWithMargin: number;
+  totalMonthlyCostBrlWithMargin: number;
+}
+
+export function presetToFlowParams(preset: SDRPreset): FlowParams {
+  return {
+    modelId: preset.modelId,
+    inputPricePer1M: preset.inputPricePer1M,
+    outputPricePer1M: preset.outputPricePer1M,
+    leadsPorDia: preset.leadsPorDia,
+    diasNoMes: preset.diasNoMes,
+    sdrMessagesPerLead: preset.sdrMessagesPerLead,
+    sdrSystemChars: preset.sdrSystemChars,
+    sdrFunctionDeclsChars: preset.sdrFunctionDeclsChars,
+    sdrHistoryChars: preset.sdrHistoryChars,
+    sdrOutputChars: preset.sdrOutputChars,
+    sdrFracionaChars: preset.sdrFracionaChars,
+    sdrHandoffChars: preset.sdrHandoffChars,
+    sdrToolLoopFactor: preset.sdrToolLoopFactor,
+    audioMessageRate: preset.audioMessageRate,
+    handoffRate: preset.handoffRate,
+    fallbackRate: preset.fallbackRate,
+    followRate: preset.followRate,
+    followDays: preset.followDays,
+    followIaDays: preset.followIaDays,
+    followMessagesPerDay: preset.followMessagesPerDay,
+    followSystemChars: preset.followSystemChars,
+    followFracionaChars: preset.followFracionaChars,
+    followHistoryChars: preset.followHistoryChars,
+    followOutputChars: preset.followOutputChars,
+    repeatedMessageRate: preset.repeatedMessageRate,
+    usdToBrl: preset.usdToBrl,
+    iofRate: preset.iofRate,
+    safetyMarginEnabled: preset.safetyMarginEnabled,
+    safetyMargin: preset.safetyMargin,
+  };
+}
+
+export function calculateSdrAndFollow(params: FlowParams): FlowResult {
+  const charsPerToken = 4;
+  const effectiveUsdBrl = params.usdToBrl * (1 + params.iofRate);
+  
+  // 1. Agente SDR principal (por mensagem)
+  const sdrAgentInputTokens = Math.ceil((params.sdrSystemChars + params.sdrFunctionDeclsChars + params.sdrHistoryChars) / charsPerToken);
+  const sdrAgentOutputTokens = Math.ceil(params.sdrOutputChars / charsPerToken);
+  const sdrAgentCallUsd = ((sdrAgentInputTokens * params.inputPricePer1M) + (sdrAgentOutputTokens * params.outputPricePer1M)) / 1_000_000;
+  const sdrAgentWeightedUsd = sdrAgentCallUsd * Math.max(1, params.sdrToolLoopFactor);
+
+  // 2. Fraciona SDR (sempre 1x)
+  const sdrFracionaInputTokens = Math.ceil((params.sdrFracionaChars + params.sdrOutputChars) / charsPerToken);
+  const sdrFracionaOutputTokens = Math.ceil(200 / charsPerToken);
+  const sdrFracionaCallUsd = ((sdrFracionaInputTokens * params.inputPricePer1M) + (sdrFracionaOutputTokens * params.outputPricePer1M)) / 1_000_000;
+
+  // 3. Transcrição de Áudio (Whisper)
+  const whisperMinCostUsd = 0.006;
+  const avgAudioMinutes = 0.5; // 30s
+  const audioCostUsdWeighted = (params.audioMessageRate || 0) * (avgAudioMinutes * whisperMinCostUsd);
+
+  // 4. Fallback OpenAI gpt-4.1-mini
+  const openAiInputPrice = 0.40;
+  const openAiOutputPrice = 1.60;
+  const fallbackCallUsd = ((sdrAgentInputTokens * openAiInputPrice) + (sdrAgentOutputTokens * openAiOutputPrice)) / 1_000_000;
+  const fallbackWeightedUsd = (params.fallbackRate || 0) * fallbackCallUsd;
+
+  // Custo base por mensagem SDR
+  const sdrMessageCostUsdBase = sdrAgentWeightedUsd + sdrFracionaCallUsd + audioCostUsdWeighted + fallbackWeightedUsd;
+  const sdrMessageCostBrlBase = sdrMessageCostUsdBase * effectiveUsdBrl;
+
+  // 5. Resumo Handoff SDR (por LEAD)
+  const sdrHandoffInputTokens = Math.ceil((params.sdrHandoffChars + params.sdrHistoryChars) / charsPerToken);
+  const sdrHandoffOutputTokens = Math.ceil(500 / charsPerToken);
+  const sdrHandoffCallUsd = ((sdrHandoffInputTokens * params.inputPricePer1M) + (sdrHandoffOutputTokens * params.outputPricePer1M)) / 1_000_000;
+  const sdrHandoffCostUsdWeightedPerLead = (params.handoffRate || 0) * sdrHandoffCallUsd;
+
+  // Custo base por Lead SDR
+  const sdrLeadCostUsdBase = (params.sdrMessagesPerLead * sdrMessageCostUsdBase) + sdrHandoffCostUsdWeightedPerLead;
+  const sdrLeadCostBrlBase = sdrLeadCostUsdBase * effectiveUsdBrl;
+
+  // 6. Agente Follow-Up
+  const followAgentInputTokens = Math.ceil((params.followSystemChars + params.followHistoryChars) / charsPerToken);
+  const followAgentOutputTokens = Math.ceil(params.followOutputChars / charsPerToken);
+  const followAgentCallUsd = ((followAgentInputTokens * params.inputPricePer1M) + (followAgentOutputTokens * params.outputPricePer1M)) / 1_000_000;
+
+  // Alternativo Follow (mensagem repetida)
+  const followAlternativoWeightedUsd = (params.repeatedMessageRate || 0) * followAgentCallUsd;
+
+  // Fraciona Follow
+  const followFracionaInputTokens = Math.ceil((params.followFracionaChars + params.followOutputChars) / charsPerToken);
+  const followFracionaOutputTokens = Math.ceil(100 / charsPerToken);
+  const followFracionaCallUsd = ((followFracionaInputTokens * params.inputPricePer1M) + (followFracionaOutputTokens * params.outputPricePer1M)) / 1_000_000;
+
+  // Custo por mensagem Follow (Dia de IA)
+  const followMessageCostUsdBase = followAgentCallUsd + followAlternativoWeightedUsd + followFracionaCallUsd;
+  const followMessageCostBrlBase = followMessageCostUsdBase * effectiveUsdBrl;
+
+  // Custo por Lead Follow (IA apenas nos dias configurados em followIaDays)
+  const followIaMsgsPerLead = (params.followRate || 0) * (params.followIaDays || 1) * (params.followMessagesPerDay || 1);
+  const followLeadCostUsdBase = followIaMsgsPerLead * followMessageCostUsdBase;
+  const followLeadCostBrlBase = followLeadCostUsdBase * effectiveUsdBrl;
+
+  // Custo Total por Lead
+  const totalLeadCostUsdBase = sdrLeadCostUsdBase + followLeadCostUsdBase;
+  const totalLeadCostBrlBase = totalLeadCostUsdBase * effectiveUsdBrl;
+
+  // Totais Mensais
+  const totalLeadsPerMonth = params.leadsPorDia * params.diasNoMes;
+  const sdrMonthlyCostBrlBase = totalLeadsPerMonth * sdrLeadCostBrlBase;
+  const followMonthlyCostBrlBase = totalLeadsPerMonth * followLeadCostBrlBase;
+  const totalMonthlyCostBrlBase = sdrMonthlyCostBrlBase + followMonthlyCostBrlBase;
+
+  // Margem de segurança
+  const marginMultiplier = params.safetyMarginEnabled ? (1 + (params.safetyMargin || 0)) : 1;
+
+  return {
+    effectiveUsdBrl,
+    sdrAgentInputTokens,
+    sdrAgentOutputTokens,
+    sdrFracionaInputTokens,
+    sdrFracionaOutputTokens,
+    sdrHandoffInputTokens,
+    sdrHandoffOutputTokens,
+    followAgentInputTokens,
+    followAgentOutputTokens,
+    followFracionaInputTokens,
+    followFracionaOutputTokens,
+
+    sdrMessageCostUsdBase,
+    sdrMessageCostBrlBase,
+    sdrHandoffCostUsdBase: sdrHandoffCallUsd,
+    sdrHandoffCostBrlBase: sdrHandoffCallUsd * effectiveUsdBrl,
+    sdrLeadCostUsdBase,
+    sdrLeadCostBrlBase,
+
+    followMessageCostUsdBase,
+    followMessageCostBrlBase,
+    followLeadCostUsdBase,
+    followLeadCostBrlBase,
+
+    totalLeadCostUsdBase,
+    totalLeadCostBrlBase,
+
+    totalLeadsPerMonth,
+    sdrMonthlyCostBrlBase,
+    followMonthlyCostBrlBase,
+    totalMonthlyCostBrlBase,
+
+    safetyMarginMultiplier: marginMultiplier,
+    followIaMsgsPerLead,
+    sdrMessageCostBrlWithMargin: sdrMessageCostBrlBase * marginMultiplier,
+    sdrLeadCostBrlWithMargin: sdrLeadCostBrlBase * marginMultiplier,
+    followMessageCostBrlWithMargin: followMessageCostBrlBase * marginMultiplier,
+    followLeadCostBrlWithMargin: followLeadCostBrlBase * marginMultiplier,
+    totalLeadCostBrlWithMargin: totalLeadCostBrlBase * marginMultiplier,
+
+    sdrMonthlyCostBrlWithMargin: sdrMonthlyCostBrlBase * marginMultiplier,
+    followMonthlyCostBrlWithMargin: followMonthlyCostBrlBase * marginMultiplier,
+    totalMonthlyCostBrlWithMargin: totalMonthlyCostBrlBase * marginMultiplier,
+  };
+}
+
+// Compatibilidade legada para SimulationParams / simulate
 export interface SimulationParams {
-  // ---- Negócio ----
   leads: number;
   period: Period;
-  firstContactMessages: number; // mensagens por lead no primeiro contato
+  firstContactMessages: number;
   followUpDays: number;
   followUpMessagesPerDay: number;
-  apiCallsPerMessage: number; // chamadas API por mensagem visível
-  // ---- Conversa ----
-  systemPromptChars: number; // ex: 40000
-  systemPromptText: string; // texto real do prompt (opcional)
-  avgUserMessageChars: number; // msg do lead
-  avgResponseChars: number; // resposta da IA
-  charsPerToken: number; // ex: 3.5 para PT, 4 para EN
-  // ---- Preço ----
-  inputPricePer1M: number; // USD por 1M tokens input
-  outputPricePer1M: number; // USD por 1M tokens output
-  cacheDiscount: number; // 0 a 0.95 — fração de desconto em tokens repetidos
-  useCache: boolean; // considerar cache de prompt
-  // ---- Escala ----
+  apiCallsPerMessage: number;
+  systemPromptChars: number;
+  systemPromptText: string;
+  avgUserMessageChars: number;
+  avgResponseChars: number;
+  charsPerToken: number;
+  inputPricePer1M: number;
+  outputPricePer1M: number;
+  useSafetyMargin: boolean;
+  safetyMarginPct: number;
   maxLeadsToSimulate: number;
-  // ---- Orçamento ----
-  monthlyBudget: number; // USD
-  // ---- Throughput (limite operacional real) ----
-  maxLeadsPerDay: number; // teto de leads/dia (capacidade do time/SDR). 0 = sem limite
+  monthlyBudget: number;
+  maxLeadsPerDay: number;
 }
 
 export interface MessageBreakdown {
   index: number;
   inputTokens: number;
-  cachedTokens: number;
-  freshTokens: number;
   outputTokens: number;
   cost: number;
-  costWithoutCache: number;
   cumulativeCost: number;
 }
 
 export interface ConversationResult {
   messagesPerLead: number;
   totalInputTokens: number;
-  totalCachedTokens: number;
-  totalFreshTokens: number;
   totalOutputTokens: number;
   totalTokens: number;
   totalCost: number;
-  totalCostWithoutCache: number;
   costPerMessage: number;
-  cacheSavings: number;
-  cacheSavingsPct: number;
   messageBreakdown: MessageBreakdown[];
 }
 
-export interface ScalingPoint {
-  leads: number;
-  cost: number;
-  messages: number;
-  costPerLead: number;
-  withinBudget: boolean;
-}
-
 export interface SimulationResult {
-  // Por lead
   perMessage: number;
   perLead: number;
   messagesPerLead: number;
   conversation: ConversationResult;
-  // No período (considerando 'period' multiplicador para mês)
   periodLeads: number;
   periodMessages: number;
   periodInputTokens: number;
   periodOutputTokens: number;
   periodCost: number;
   monthlyEquivalentCost: number;
-  monthlyCacheSavings: number;
-  // Escala
-  scalingSeries: ScalingPoint[];
+  scalingSeries: { leads: number; cost: number; messages: number; costPerLead: number; withinBudget: boolean }[];
   maxLeadsInBudget: number;
-  costIncrementalPerLead: number; // custo marginal de 1 lead a mais
-  // Comparação rápida de raw
+  costIncrementalPerLead: number;
   inputPricePer1M: number;
   outputPricePer1M: number;
-  cacheDiscount: number;
-  useCache: boolean;
-  // Novas métricas de chamadas API
+  useSafetyMargin: boolean;
+  safetyMarginPct: number;
   apiCallsPerLead: number;
   periodApiCalls: number;
   monthlyEquivalentApiCalls: number;
 }
 
-// Quantos períodos cabem num mês (para calcular custo mensal equivalente)
 export function periodsPerMonth(period: Period): number {
   switch (period) {
     case "day":
@@ -105,109 +330,62 @@ export function periodsPerMonth(period: Period): number {
   }
 }
 
-// Custo de uma conversa completa (1 lead) com histórico acumulado
-// Modela prompt caching: tokens repetidos (prompt do sistema + histórico já visto)
-// recebem desconto. A mensagem atual do lead é sempre "fresca" (preço cheio).
 export function calculateConversation(params: SimulationParams): ConversationResult {
-  const messagesPerLead =
-    params.firstContactMessages +
-    params.followUpDays * params.followUpMessagesPerDay;
-
-  const useCache = params.useCache && params.cacheDiscount > 0;
-  const discount = useCache ? params.cacheDiscount : 0;
+  const messagesPerLead = params.firstContactMessages + params.followUpDays * params.followUpMessagesPerDay;
+  const safetyMultiplier = params.useSafetyMargin && params.safetyMarginPct > 0 ? 1 + params.safetyMarginPct / 100 : 1;
 
   let totalInputTokens = 0;
-  let totalCachedTokens = 0;
-  let totalFreshTokens = 0;
   let totalOutputTokens = 0;
   let cumulativeCost = 0;
-  let cumulativeCostWithoutCache = 0;
   const messageBreakdown: MessageBreakdown[] = [];
 
   const K = Math.max(1, params.apiCallsPerMessage || 1);
 
   for (let i = 0; i < messagesPerLead; i++) {
-    // histórico anterior = i mensagens (cada uma com user msg + resposta)
     const previousChars = i * (params.avgUserMessageChars + params.avgResponseChars);
 
     let msgInputTokens = 0;
-    let msgCachedTokens = 0;
-    let msgFreshTokens = 0;
     let msgOutputTokens = 0;
     let msgCost = 0;
-    let msgCostWithoutCache = 0;
 
     for (let k = 1; k <= K; k++) {
-      // 1ª chamada API: prompt de sistema + histórico + mensagem do lead
-      // Demais chamadas API: prompt de sistema + histórico + mensagem do lead + resposta IA
-      const cachedChars = params.systemPromptChars + previousChars;
-      const freshChars = k === 1 
-        ? params.avgUserMessageChars 
-        : params.avgUserMessageChars + params.avgResponseChars;
+      const inputChars = params.systemPromptChars + previousChars + (k === 1 ? params.avgUserMessageChars : params.avgUserMessageChars + params.avgResponseChars);
       const outputChars = params.avgResponseChars;
 
-      const cachedTokens = Math.ceil(cachedChars / params.charsPerToken);
-      const freshTokens = Math.ceil(freshChars / params.charsPerToken);
-      const inputTokens = cachedTokens + freshTokens;
+      const inputTokens = Math.ceil(inputChars / params.charsPerToken);
       const outputTokens = Math.ceil(outputChars / params.charsPerToken);
 
-      // Preço efetivo do input: tokens em cache pagam (1 - discount), frescos pagam cheio
-      const effectiveInputPrice =
-        (cachedTokens * params.inputPricePer1M * (1 - discount) +
-          freshTokens * params.inputPricePer1M) /
-        1_000_000;
-      const inputCost = effectiveInputPrice;
-      const inputCostWithoutCache = (inputTokens / 1_000_000) * params.inputPricePer1M;
+      const inputCost = (inputTokens / 1_000_000) * params.inputPricePer1M;
       const outputCost = (outputTokens / 1_000_000) * params.outputPricePer1M;
-      
-      const cost = inputCost + outputCost;
-      const costWithoutCache = inputCostWithoutCache + outputCost;
+
+      const rawCost = inputCost + outputCost;
+      const cost = rawCost * safetyMultiplier;
 
       msgInputTokens += inputTokens;
-      msgCachedTokens += cachedTokens;
-      msgFreshTokens += freshTokens;
       msgOutputTokens += outputTokens;
       msgCost += cost;
-      msgCostWithoutCache += costWithoutCache;
     }
 
     totalInputTokens += msgInputTokens;
-    totalCachedTokens += msgCachedTokens;
-    totalFreshTokens += msgFreshTokens;
     totalOutputTokens += msgOutputTokens;
     cumulativeCost += msgCost;
-    cumulativeCostWithoutCache += msgCostWithoutCache;
 
     messageBreakdown.push({
       index: i + 1,
       inputTokens: msgInputTokens,
-      cachedTokens: msgCachedTokens,
-      freshTokens: msgFreshTokens,
       outputTokens: msgOutputTokens,
       cost: msgCost,
-      costWithoutCache: msgCostWithoutCache,
       cumulativeCost,
     });
   }
 
-  const totalCost = cumulativeCost;
-  const totalCostWithoutCache = cumulativeCostWithoutCache;
-  const cacheSavings = totalCostWithoutCache - totalCost;
-  const cacheSavingsPct =
-    totalCostWithoutCache > 0 ? (cacheSavings / totalCostWithoutCache) * 100 : 0;
-
   return {
     messagesPerLead,
     totalInputTokens,
-    totalCachedTokens,
-    totalFreshTokens,
     totalOutputTokens,
     totalTokens: totalInputTokens + totalOutputTokens,
-    totalCost,
-    totalCostWithoutCache,
-    costPerMessage: messagesPerLead > 0 ? totalCost / messagesPerLead : 0,
-    cacheSavings,
-    cacheSavingsPct,
+    totalCost: cumulativeCost,
+    costPerMessage: messagesPerLead > 0 ? cumulativeCost / messagesPerLead : 0,
     messageBreakdown,
   };
 }
@@ -220,7 +398,6 @@ export function simulate(params: SimulationParams): SimulationResult {
   const K = Math.max(1, params.apiCallsPerMessage || 1);
   const apiCallsPerLead = convo.messagesPerLead * K;
 
-  // período → mês
   const ppm = periodsPerMonth(params.period);
   const periodCost = params.leads * perLead;
   const monthlyEquivalentCost = periodCost * ppm;
@@ -228,8 +405,7 @@ export function simulate(params: SimulationParams): SimulationResult {
   const periodApiCalls = params.leads * apiCallsPerLead;
   const monthlyEquivalentApiCalls = periodApiCalls * ppm;
 
-  // série de escala
-  const scalingSeries: ScalingPoint[] = [];
+  const scalingSeries: { leads: number; cost: number; messages: number; costPerLead: number; withinBudget: boolean }[] = [];
   const maxLeads = Math.max(params.maxLeadsToSimulate, params.leads, 1);
   const stepSize = Math.max(1, Math.ceil(maxLeads / 25));
   for (let l = 1; l <= maxLeads; l += stepSize) {
@@ -238,17 +414,6 @@ export function simulate(params: SimulationParams): SimulationResult {
       leads: l,
       cost,
       messages: l * convo.messagesPerLead * ppm,
-      costPerLead: perLead,
-      withinBudget: params.monthlyBudget > 0 ? cost <= params.monthlyBudget : true,
-    });
-  }
-  // garantir que o último ponto esteja presente
-  if (scalingSeries[scalingSeries.length - 1]?.leads !== maxLeads) {
-    const cost = maxLeads * perLead * ppm;
-    scalingSeries.push({
-      leads: maxLeads,
-      cost,
-      messages: maxLeads * convo.messagesPerLead * ppm,
       costPerLead: perLead,
       withinBudget: params.monthlyBudget > 0 ? cost <= params.monthlyBudget : true,
     });
@@ -270,115 +435,40 @@ export function simulate(params: SimulationParams): SimulationResult {
     periodOutputTokens: params.leads * convo.totalOutputTokens,
     periodCost,
     monthlyEquivalentCost,
-    monthlyCacheSavings: convo.cacheSavings * params.leads * ppm,
     scalingSeries,
     maxLeadsInBudget,
     costIncrementalPerLead: perLead,
     inputPricePer1M: params.inputPricePer1M,
     outputPricePer1M: params.outputPricePer1M,
-    cacheDiscount: params.cacheDiscount,
-    useCache: params.useCache,
+    useSafetyMargin: params.useSafetyMargin,
+    safetyMarginPct: params.safetyMarginPct,
     apiCallsPerLead,
     periodApiCalls,
     monthlyEquivalentApiCalls,
   };
 }
 
-// Cenários padrão úteis
 export const DEFAULT_PARAMS: SimulationParams = {
   leads: 16,
   period: "month",
   firstContactMessages: 10,
   followUpDays: 14,
   followUpMessagesPerDay: 1,
-  apiCallsPerMessage: 2,
+  apiCallsPerMessage: 1.5,
   systemPromptChars: 37728,
   systemPromptText: "",
   avgUserMessageChars: 500,
   avgResponseChars: 800,
-  charsPerToken: 3.5,
-  inputPricePer1M: 0.10,
-  outputPricePer1M: 0.40,
-  cacheDiscount: 0.75,
-  useCache: true,
+  charsPerToken: 4,
+  inputPricePer1M: 0.25,
+  outputPricePer1M: 1.50,
+  useSafetyMargin: true,
+  safetyMarginPct: 30,
   maxLeadsToSimulate: 100,
   monthlyBudget: 0,
   maxLeadsPerDay: 0,
 };
 
-// Presets de cenário
-export interface ScenarioPreset {
-  id: string;
-  name: string;
-  description: string;
-  emoji: string;
-  patch: Partial<SimulationParams>;
-}
-
-export const SCENARIO_PRESETS: ScenarioPreset[] = [
-  {
-    id: "sdr-inbound",
-    name: "SDR Inbound",
-    description: "Lead quente que solicitou contato — conversa curta e direta",
-    emoji: "🔥",
-    patch: {
-      leads: 30,
-      period: "month",
-      firstContactMessages: 4,
-      followUpDays: 3,
-      followUpMessagesPerDay: 1,
-      avgUserMessageChars: 600,
-      avgResponseChars: 700,
-    },
-  },
-  {
-    id: "sdr-outbound-cold",
-    name: "SDR Outbound Cold",
-    description: "Prospecto frio — precisa de mais tentativas de follow-up",
-    emoji: "❄️",
-    patch: {
-      leads: 50,
-      period: "month",
-      firstContactMessages: 2,
-      followUpDays: 8,
-      followUpMessagesPerDay: 1,
-      avgUserMessageChars: 400,
-      avgResponseChars: 900,
-    },
-  },
-  {
-    id: "suporte-n1",
-    name: "Suporte Nível 1",
-    description: "Triagem e FAQ rápido — respostas curtas e resolução rápida",
-    emoji: "🎧",
-    patch: {
-      leads: 100,
-      period: "month",
-      firstContactMessages: 3,
-      followUpDays: 1,
-      followUpMessagesPerDay: 1,
-      avgUserMessageChars: 800,
-      avgResponseChars: 500,
-    },
-  },
-  {
-    id: "suporte-n2",
-    name: "Suporte Nível 2",
-    description: "Casos complexos — histórico longo e muitas mensagens",
-    emoji: "🛠️",
-    patch: {
-      leads: 40,
-      period: "month",
-      firstContactMessages: 6,
-      followUpDays: 4,
-      followUpMessagesPerDay: 2,
-      avgUserMessageChars: 1000,
-      avgResponseChars: 1200,
-    },
-  },
-];
-
-// Otimizador
 export interface OptimizerModelInput {
   id: string;
   providerName: string;
@@ -386,7 +476,6 @@ export interface OptimizerModelInput {
   color: string | null;
   inputPricePer1M: number;
   outputPricePer1M: number;
-  cacheDiscount: number;
   contextWindow: number | null;
   modality: string;
 }
@@ -398,7 +487,6 @@ export interface OptimizerResult {
   color: string | null;
   inputPricePer1M: number;
   outputPricePer1M: number;
-  cacheDiscount: number;
   contextWindow: number | null;
   modality: string;
   costPerLead: number;
@@ -418,18 +506,6 @@ export interface OptimizeOutput {
   results: OptimizerResult[];
   best: OptimizerResult | null;
   throughputCapPerMonth: number;
-  conversationParams: Pick<
-    SimulationParams,
-    | "firstContactMessages"
-    | "followUpDays"
-    | "followUpMessagesPerDay"
-    | "apiCallsPerMessage"
-    | "systemPromptChars"
-    | "avgUserMessageChars"
-    | "avgResponseChars"
-    | "charsPerToken"
-    | "useCache"
-  >;
 }
 
 export function optimizeForBudget(
@@ -439,16 +515,13 @@ export function optimizeForBudget(
 ): OptimizeOutput {
   const monthlyBudget = budget ?? baseParams.monthlyBudget;
   const ppm = periodsPerMonth(baseParams.period);
-  const throughputCapPerMonth =
-    baseParams.maxLeadsPerDay > 0 ? Math.floor(baseParams.maxLeadsPerDay * 30) : 0;
+  const throughputCapPerMonth = baseParams.maxLeadsPerDay > 0 ? Math.floor(baseParams.maxLeadsPerDay * 30) : 0;
 
   const results: OptimizerResult[] = models.map((m) => {
     const params: SimulationParams = {
       ...baseParams,
       inputPricePer1M: m.inputPricePer1M,
       outputPricePer1M: m.outputPricePer1M,
-      cacheDiscount: m.cacheDiscount,
-      useCache: baseParams.useCache && m.cacheDiscount > 0,
     };
     const convo = calculateConversation(params);
     const costPerLead = convo.totalCost;
@@ -464,8 +537,7 @@ export function optimizeForBudget(
       throughputCapPerMonth > 0
         ? Math.min(uncappedLeadsInBudget, throughputCapPerMonth)
         : uncappedLeadsInBudget;
-    const cappedByThroughput =
-      throughputCapPerMonth > 0 && uncappedLeadsInBudget > throughputCapPerMonth;
+    const cappedByThroughput = throughputCapPerMonth > 0 && uncappedLeadsInBudget > throughputCapPerMonth;
 
     const monthlyCostAtMax = maxLeadsInBudget * costPerLead * ppm;
     const messagesPerLead = convo.messagesPerLead;
@@ -480,7 +552,6 @@ export function optimizeForBudget(
       color: m.color,
       inputPricePer1M: m.inputPricePer1M,
       outputPricePer1M: m.outputPricePer1M,
-      cacheDiscount: m.cacheDiscount,
       contextWindow: m.contextWindow,
       modality: m.modality,
       costPerLead,
@@ -508,242 +579,102 @@ export function optimizeForBudget(
     results,
     best: results[0] ?? null,
     throughputCapPerMonth,
-    conversationParams: {
-      firstContactMessages: baseParams.firstContactMessages,
-      followUpDays: baseParams.followUpDays,
-      followUpMessagesPerDay: baseParams.followUpMessagesPerDay,
-      apiCallsPerMessage: baseParams.apiCallsPerMessage,
-      systemPromptChars: baseParams.systemPromptChars,
-      avgUserMessageChars: baseParams.avgUserMessageChars,
-      avgResponseChars: baseParams.avgResponseChars,
-      charsPerToken: baseParams.charsPerToken,
-      useCache: baseParams.useCache,
-    },
   };
 }
 
-// Análise de sensibilidade
-export interface SensitivityPoint {
-  budget: number;
-  bestModelId: string;
-  bestModelName: string;
-  bestProviderName: string;
-  bestColor: string | null;
-  bestLeads: number;
-  bestCostPerLead: number;
-  top3: { id: string; name: string; leads: number; color: string | null }[];
-}
-
-export interface SensitivityOutput {
-  points: SensitivityPoint[];
-  winners: { id: string; name: string; providerName: string; color: string | null }[];
-  switchPoints: { budget: number; from: string; to: string }[];
-  budgetMin: number;
-  budgetMax: number;
-}
-
-export function sensitivityAnalysis(
-  baseParams: SimulationParams,
-  models: OptimizerModelInput[],
-  budgetMin = 5,
-  budgetMax = 500,
-  steps = 24
-): SensitivityOutput {
-  const points: SensitivityPoint[] = [];
-  const stepSize = (budgetMax - budgetMin) / steps;
-
-  for (let i = 0; i <= steps; i++) {
-    const budget = Math.round(budgetMin + stepSize * i);
-    const out = optimizeForBudget(baseParams, models, budget);
-    const top3 = out.results.slice(0, 3).map((r) => ({
-      id: r.id,
-      name: `${r.providerName} ${r.modelName}`,
-      leads: r.maxLeadsInBudget,
-      color: r.color,
-    }));
-    const best = out.best;
-    if (best) {
-      points.push({
-        budget,
-        bestModelId: best.id,
-        bestModelName: best.modelName,
-        bestProviderName: best.providerName,
-        bestColor: best.color,
-        bestLeads: best.maxLeadsInBudget,
-        bestCostPerLead: best.costPerLead,
-        top3,
-      });
-    }
-  }
-
-  const winnersMap = new Map<string, { id: string; name: string; providerName: string; color: string | null }>();
-  for (const p of points) {
-    if (!winnersMap.has(p.bestModelId)) {
-      winnersMap.set(p.bestModelId, {
-        id: p.bestModelId,
-        name: p.bestModelName,
-        providerName: p.bestProviderName,
-        color: p.bestColor,
-      });
-    }
-  }
-
-  const switchPoints: { budget: number; from: string; to: string }[] = [];
-  for (let i = 1; i < points.length; i++) {
-    if (points[i].bestModelId !== points[i - 1].bestModelId) {
-      switchPoints.push({
-        budget: points[i].budget,
-        from: points[i - 1].bestModelName,
-        to: points[i].bestModelName,
-      });
-    }
-  }
-
-  return {
-    points,
-    winners: [...winnersMap.values()],
-    switchPoints,
-    budgetMin,
-    budgetMax,
-  };
-}
-
-// Análise de Break-even
-export interface BreakEvenInput {
-  modelA: {
-    id: string;
-    name: string;
-    providerName: string;
-    color: string | null;
-    inputPricePer1M: number;
-    outputPricePer1M: number;
-    cacheDiscount: number;
-  };
-  modelB: {
-    id: string;
-    name: string;
-    providerName: string;
-    color: string | null;
-    inputPricePer1M: number;
-    outputPricePer1M: number;
-    cacheDiscount: number;
-  };
+export function breakEvenAnalysis(input: {
+  modelA: { inputPricePer1M: number; outputPricePer1M: number; name?: string; fullName?: string };
+  modelB: { inputPricePer1M: number; outputPricePer1M: number; name?: string; fullName?: string };
   baseParams: SimulationParams;
-  migrationCost: number; // USD
-}
-
-export interface BreakEvenResult {
-  costPerLeadA: number;
-  costPerLeadB: number;
-  savingPerLead: number;
-  breakEvenLeads: number;
-  breakEvenMonths: number;
-  series: { leads: number; costA: number; costBWithMigration: number; costB: number }[];
-  recommendation:
-    | { type: "migrate"; reason: string }
-    | { type: "stay"; reason: string }
-    | { type: "neutral"; reason: string };
-  annualSaving: number;
-  bIsMoreExpensive: boolean;
-}
-
-export function breakEvenAnalysis(input: BreakEvenInput): BreakEvenResult {
-  const { modelA, modelB, baseParams, migrationCost } = input;
-  const ppm = periodsPerMonth(baseParams.period);
-
-  const paramsA: SimulationParams = {
-    ...baseParams,
-    inputPricePer1M: modelA.inputPricePer1M,
-    outputPricePer1M: modelA.outputPricePer1M,
-    cacheDiscount: modelA.cacheDiscount,
-    useCache: baseParams.useCache && modelA.cacheDiscount > 0,
-  };
+  migrationCost: number;
+}) {
+  const paramsA = { ...input.baseParams, inputPricePer1M: input.modelA.inputPricePer1M, outputPricePer1M: input.modelA.outputPricePer1M };
+  const paramsB = { ...input.baseParams, inputPricePer1M: input.modelB.inputPricePer1M, outputPricePer1M: input.modelB.outputPricePer1M };
   const costPerLeadA = calculateConversation(paramsA).totalCost;
-
-  const paramsB: SimulationParams = {
-    ...baseParams,
-    inputPricePer1M: modelB.inputPricePer1M,
-    outputPricePer1M: modelB.outputPricePer1M,
-    cacheDiscount: modelB.cacheDiscount,
-    useCache: baseParams.useCache && modelB.cacheDiscount > 0,
-  };
   const costPerLeadB = calculateConversation(paramsB).totalCost;
-
   const savingPerLead = costPerLeadA - costPerLeadB;
-  const bIsMoreExpensive = savingPerLead < 0;
+  const monthlySavings = Math.max(0, savingPerLead * input.baseParams.leads * periodsPerMonth(input.baseParams.period));
+  const annualSaving = monthlySavings * 12;
+  const breakEvenMonths = savingPerLead > 0 ? (input.migrationCost / Math.max(0.0001, monthlySavings)) : Infinity;
+  const breakEvenLeads = savingPerLead > 0 ? Math.ceil(input.migrationCost / Math.max(0.0001, savingPerLead)) : Infinity;
 
-  const breakEvenLeads =
-    savingPerLead > 0 ? Math.ceil(migrationCost / savingPerLead) : Infinity;
-  const breakEvenMonths =
-    savingPerLead > 0 && baseParams.leads > 0
-      ? breakEvenLeads / (baseParams.leads * ppm)
-      : 0;
+  const series = [1, 2, 3, 6, 12, 24].map((m) => ({
+    month: m,
+    cumA: m * input.baseParams.leads * periodsPerMonth(input.baseParams.period) * costPerLeadA,
+    cumB: m * input.baseParams.leads * periodsPerMonth(input.baseParams.period) * costPerLeadB + input.migrationCost,
+  }));
 
-  const maxLeads = Math.max(
-    baseParams.maxLeadsToSimulate,
-    baseParams.leads,
-    breakEvenLeads === Infinity ? 100 : breakEvenLeads * 2,
-    100
-  );
-  const series: BreakEvenResult["series"] = [];
-  const step = Math.max(1, Math.ceil(maxLeads / 30));
-  for (let l = 0; l <= maxLeads; l += step) {
-    series.push({
-      leads: l,
-      costA: l * costPerLeadA * ppm,
-      costBWithMigration: l * costPerLeadB * ppm + migrationCost,
-      costB: l * costPerLeadB * ppm,
-    });
-  }
+  const chartData = [100, 500, 1000, 2500, 5000, 10000].map((leads) => ({
+    leads,
+    costATotal: leads * costPerLeadA,
+    costBTotal: leads * costPerLeadB + input.migrationCost,
+  }));
 
-  if (series[series.length - 1]?.leads !== maxLeads) {
-    series.push({
-      leads: maxLeads,
-      costA: maxLeads * costPerLeadA * ppm,
-      costBWithMigration: maxLeads * costPerLeadB * ppm + migrationCost,
-      costB: maxLeads * costPerLeadB * ppm,
-    });
-  }
-
-  const annualSaving = baseParams.leads > 0 ? baseParams.leads * ppm * 12 * savingPerLead : 0;
-
-  let recommendation: BreakEvenResult["recommendation"];
-  if (bIsMoreExpensive) {
-    recommendation = {
-      type: "stay",
-      reason: `B é mais caro que A por lead. Não migrar.`,
-    };
-  } else if (savingPerLead === 0) {
-    recommendation = {
-      type: "neutral",
-      reason: "Custo por lead idêntico. A decisão é por qualidade, não preço.",
-    };
-  } else if (breakEvenLeads === Infinity || breakEvenMonths > 24) {
-    recommendation = {
-      type: "stay",
-      reason: `Break-even em ${breakEvenLeads === Infinity ? "∞" : breakEvenMonths.toFixed(1) + " meses"} — muito longo. Economia por lead não cobre a migração em prazo razoável.`,
-    };
-  } else if (breakEvenMonths <= 3) {
-    recommendation = {
-      type: "migrate",
-      reason: `Break-even em ${breakEvenMonths.toFixed(1)} meses (${breakEvenLeads.toLocaleString()} leads). Migração se paga rápido — vale muito a pena!`,
-    };
-  } else {
-    recommendation = {
-      type: "migrate",
-      reason: `Break-even em ${breakEvenMonths.toFixed(1)} meses (${breakEvenLeads.toLocaleString()} leads). Economia anual de $${annualSaving.toFixed(2)}.`,
-    };
-  }
+  const recommendation = savingPerLead > 0
+    ? { type: "migrate", reason: `A migração se paga em cerca de ${breakEvenMonths.toFixed(1)} meses (${breakEvenLeads} leads).` }
+    : savingPerLead < 0
+    ? { type: "stay", reason: "O Modelo B possui custo superior ao Modelo A para a sua régua atual." }
+    : { type: "equal", reason: "Ambos os modelos possuem custo idêntico nesta simulação." };
 
   return {
+    costA: costPerLeadA,
+    costB: costPerLeadB,
     costPerLeadA,
     costPerLeadB,
     savingPerLead,
+    savingsPerLead: savingPerLead,
+    monthlySavings,
+    annualSaving,
     breakEvenLeads,
     breakEvenMonths,
-    series,
+    paybackMonths: breakEvenMonths,
     recommendation,
-    annualSaving,
-    bIsMoreExpensive,
+    chartData,
+    series
   };
 }
+
+export function sensitivityAnalysis(params: SimulationParams, models: OptimizerModelInput[]) {
+  const budgets = [10, 25, 50, 100, 200, 350, 500];
+  const points = budgets.map((b) => {
+    const opt = optimizeForBudget(params, models, b);
+    const top = opt.best;
+    return {
+      budget: b,
+      maxLeads: top ? top.maxLeadsInBudget : 0,
+      bestModel: top ? top.modelName : "N/A",
+    };
+  });
+  return { points };
+}
+
+export const SCENARIO_PRESETS = [
+  {
+    id: "resgata",
+    emoji: "👑",
+    name: "Cenário Real Resgata",
+    title: "Cenário Real Resgata (n8n v9.1)",
+    description: "SDR + Follow com 37.7k chars e 1 dia de IA",
+    patch: {
+      leads: 20,
+      firstContactMessages: 15,
+      followUpDays: 14,
+      followUpMessagesPerDay: 1,
+      systemPromptChars: 37727,
+    }
+  },
+  {
+    id: "econ-sdr",
+    emoji: "⚡",
+    name: "SDR Ultra Enxuto",
+    title: "SDR Ultra Enxuto",
+    description: "System prompt reduzido (~10k chars), 8 msgs/lead",
+    patch: {
+      leads: 20,
+      firstContactMessages: 8,
+      followUpDays: 14,
+      followUpMessagesPerDay: 1,
+      systemPromptChars: 10000,
+    }
+  }
+];

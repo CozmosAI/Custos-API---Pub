@@ -16,6 +16,7 @@ import {
   PlusCircle, 
   RotateCcw,
   Zap,
+  ShieldAlert,
   ChevronDown
 } from "lucide-react";
 import { formatMoney, formatNumber } from "../lib/format";
@@ -62,8 +63,6 @@ export const SimulatorForm: React.FC<SimulatorFormProps> = ({ onSaveScenario }) 
       setParams({
         inputPricePer1M: m.inputPricePer1M,
         outputPricePer1M: m.outputPricePer1M,
-        cacheDiscount: m.cacheDiscount,
-        useCache: m.cacheDiscount > 0
       });
     }
   };
@@ -162,44 +161,47 @@ export const SimulatorForm: React.FC<SimulatorFormProps> = ({ onSaveScenario }) 
               </div>
             </div>
 
-            {/* Prompt Caching Switch */}
+
+
+            {/* Margem de Erro / Segurança Switch */}
             <div className="bg-gray-900/60 border border-gray-800 rounded-lg p-3 space-y-3">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-1.5">
-                  <Zap className="h-4 w-4 text-emerald-500" />
-                  <span className="text-xs font-bold text-gray-300">Prompt Caching</span>
+                  <ShieldAlert className="h-4 w-4 text-amber-400" />
+                  <span className="text-xs font-bold text-gray-300">Margem de Erro / Segurança (+{params.safetyMarginPct}%)</span>
+                  <HelpTip text="Adiciona uma margem de contingência percentual sobre os custos calculados para cobrir variações de respostas, retentativas ou mensagens atípicas." />
                 </div>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={params.useCache}
-                    disabled={params.cacheDiscount === 0}
-                    onChange={(e) => setParams({ useCache: e.target.checked })}
+                    checked={params.useSafetyMargin}
+                    onChange={(e) => setParams({ useSafetyMargin: e.target.checked })}
                     className="sr-only peer"
                   />
-                  <div className="w-8 h-4.5 bg-gray-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-gray-200 after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-primary"></div>
+                  <div className="w-8 h-4.5 bg-gray-800 rounded-full peer peer-checked:after:translate-x-full after:content-[''] after:absolute after:top-0.5 after:left-[2px] after:bg-gray-200 after:border-gray-300 after:border after:rounded-full after:h-3.5 after:w-3.5 after:transition-all peer-checked:bg-amber-500"></div>
                 </label>
               </div>
 
-              {params.useCache && (
+              {params.useSafetyMargin && (
                 <div className="flex items-center justify-between text-xs animate-in fade-in-0 duration-100">
-                  <span className="text-gray-400">Desconto do cache</span>
+                  <span className="text-gray-400">Porcentagem de margem</span>
                   <div className="flex items-center gap-1">
+                    <span className="text-amber-400 font-bold">+</span>
                     <input
                       type="number"
-                      value={Math.round(params.cacheDiscount * 100)}
+                      value={params.safetyMarginPct}
                       onChange={(e) => {
-                        const val = Math.min(95, Math.max(0, parseInt(e.target.value) || 0));
-                        setParams({ cacheDiscount: val / 100 });
+                        const val = Math.min(200, Math.max(0, parseInt(e.target.value) || 0));
+                        setParams({ safetyMarginPct: val });
                       }}
-                      className="w-12 h-6 text-center text-xs bg-gray-950 border border-gray-800 text-gray-200 rounded font-semibold focus:outline-none focus:border-primary"
+                      className="w-12 h-6 text-center text-xs bg-gray-950 border border-gray-800 text-gray-200 rounded font-semibold focus:outline-none focus:border-amber-500"
                     />
                     <span className="text-gray-400 font-semibold">%</span>
                   </div>
                 </div>
               )}
               <p className="text-[10px] text-gray-500 leading-normal">
-                Reduz drasticamente o custo de tokens repetidos. Anthropic dá 90% de desconto, Google 75% e OpenAI 50%.
+                Aumenta a estimativa em +{params.safetyMarginPct}% para simular orçamentos com margem de segurança contra imprevistos ou conversas longas.
               </p>
             </div>
           </div>

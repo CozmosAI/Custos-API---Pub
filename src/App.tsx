@@ -1,4 +1,6 @@
 import React, { useState, useMemo } from "react";
+import { calculateSdrAndFollow, FlowParams } from "./lib/cost";
+import { REAL_RESGATA_PRESET } from "./lib/presets";
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -604,7 +606,10 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
 
   // Parâmetros de Otimização e Realidade do Fluxo (Supabase & Cache)
     const [supabaseToolsSize, setSupabaseToolsSize] = useState<number>(5000); // Funções/tools e payloads adicionais do Supabase no prompt (em chars)
-  const [avgSdrMsgs, setAvgSdrMsgs] = useState<number>(8); // Número médio de interações reais que o lead de fato faz no SDR
+  const [avgSdrMsgs, setAvgSdrMsgs] = useState<number>(15); // Número médio de interações reais que o lead de fato faz no SDR
+  const [sdrToolLoopFactor, setSdrToolLoopFactor] = useState<number>(1.5); // Factor de tool-loop/raciocínio (default 1.5x)
+  const [useSafetyMargin, setUseSafetyMargin] = useState<boolean>(true); // Margem de segurança / contingência
+  const [safetyMarginPct, setSafetyMarginPct] = useState<number>(30); // 30% de margem
   const [activeFollowupsPerDay, setActiveFollowupsPerDay] = useState<number>(500); // Leads que recebem follow-up ativo diariamente (ex: 500)
   const [useDynamicQueue, setUseDynamicQueue] = useState<boolean>(true); // Simular base de leads ativa com churn após dias de follow-up
   const [followupRetention, setFollowupRetention] = useState<number>(30); // % de leads que chegam até o final do follow-up (o resto responde ou sai antes)
@@ -670,9 +675,8 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
     return `R$ ${(finalPriceUSD * usdBrlRate).toFixed(2)}`;
   };
 
-  // --- CÁLCULOS CENTRAIS ---
+  // --- CÁLCULOS CENTRAIS (Motor Único de Verdade: lib/cost.ts) ---
   const calcResults = useMemo(() => {
-    // 1. Normalização do fluxo diário de entrada de leads com base no período selecionado
     let leadsPorDia = leads;
     if (period === "semana") {
       leadsPorDia = leads / 7;
@@ -680,317 +684,151 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
       leadsPorDia = leads / 30;
     }
 
-    const dailyLeadsIntake = leadsPorDia; // Keep variable for other uses if any
-    const mensagensSDR = Math.max(1, avgSdrMsgs);
-
-    // 1. MÚLTIPLOS FLUXOS DE FOLLOW-UP
-    let totalFollowMsgsPerLead = 0;
-    let totalFollowCostPerLead = 0;
-    let totalDailyFollowMsgs = 0;
-
     const tierMultiplier = selectedTier === "batch" || selectedTier === "flex" ? 0.5 : selectedTier === "priority" ? 1.8 : 1;
-    const preçoInput = selectedModel.inputUSD * usdBrlRate * tierMultiplier;
-    const preçoOutput = selectedModel.outputUSD * usdBrlRate * tierMultiplier;
+    const modelInputPrice = selectedModel.inputUSD * tierMultiplier;
+    const modelOutputPrice = selectedModel.outputUSD * tierMultiplier;
 
-    let custoSDRPorLead = 0;
-    let custoMensagemFollow = 0;
-    let totalInputTokens = 0;
-    let totalOutputTokens = 0;
-    const mensagensDetalhes: {
-      num: number;
-      tipo: string;
-      inputChars: number;
-      outputChars: number;
-      inputTokens: number;
-      outputTokens: number;
-      custoMsg: number;
-    }[] = [];
+    const flowParams: FlowParams = {
+      modelId: selectedModel.id,
+      inputPricePer1M: modelInputPrice,
+      outputPricePer1M: modelOutputPrice,
+      leadsPorDia,
+      diasNoMes: 30,
+      sdrMessagesPerLead: Math.max(1, avgSdrMsgs),
+      sdrSystemChars: promptSistema,
+      sdrFunctionDeclsChars: supabaseToolsSize,
+      sdrHistoryChars: Math.round(Math.max(0, avgSdrMsgs - 1) * (msgLead + respostaIA)),
+      sdrOutputChars: respostaIA,
+      sdrFracionaChars: promptSdrFracionador,
+      sdrHandoffChars: promptSdrHandoff,
+      sdrToolLoopFactor: sdrToolLoopFactor,
+      audioMessageRate: 0.20,
+      handoffRate: 0.05,
+      fallbackRate: 0.02,
+      followRate: 1.0,
+      followDays: diasFollowup,
+      followIaDays: 1,
+      followMessagesPerDay: msgsPorDia,
+      followSystemChars: promptFollowPrincipal,
+      followFracionaChars: promptFollowFracionador,
+      followHistoryChars: 5900,
+      followOutputChars: respostaIA,
+      repeatedMessageRate: 0.0,
+      usdToBrl: usdBrlRate,
+      iofRate: 0.0,
+      safetyMarginEnabled: useSafetyMargin,
+      safetyMargin: (safetyMarginPct || 0) / 100,
+    };
 
-    if (calcMode === "regua") {
-      // 1. FLUXO SDR (1º contato)
-      for (let i = 1; i <= mensagensSDR; i++) {
-        let custoMsg = 0;
-        let msgInputTokens = 0;
-        let msgOutputTokens = 0;
+    const res = calculateSdrAndFollow(flowParams);
 
-        for (let c = 1; c <= chamadasPorMsg; c++) {
-          let promptChars = promptSistema;
-          let inputChars = 0;
-          let outputChars = respostaIA;
-
-          if (c === 1) {
-            const historyChars = (i - 1) * (msgLead + respostaIA);
-            inputChars = promptSistema + supabaseToolsSize + historyChars + msgLead;
-          } else if (c === 2) {
-            promptChars = promptSdrFracionador;
-            inputChars = promptChars + respostaIA;
-          } else {
-            promptChars = 2000;
-            inputChars = promptChars + msgLead;
-          }
-
-          const inputTokens = Math.ceil(inputChars / 3.5);
-          const outputTokens = Math.ceil(outputChars / 3.5);
-
-          let custoCall = 0;
-          custoCall = (inputTokens * preçoInput + outputTokens * preçoOutput) / 1_000_000;
-
-          if (gatewayMarkup > 0) {
-            custoCall = custoCall * (1 + gatewayMarkup / 100);
-          }
-
-          custoMsg += custoCall;
-          msgInputTokens += inputTokens;
-          msgOutputTokens += outputTokens;
-        }
-
-        if (i <= avgSdrMsgs) {
-          custoSDRPorLead += custoMsg;
-          totalInputTokens += msgInputTokens;
-          totalOutputTokens += msgOutputTokens;
-        }
-
-        mensagensDetalhes.push({
-          num: i,
-          tipo: "SDR",
-          inputChars: promptSistema + supabaseToolsSize + (i - 1) * (msgLead + respostaIA) + msgLead,
-          outputChars: respostaIA,
-          inputTokens: msgInputTokens,
-          outputTokens: msgOutputTokens,
-          custoMsg
-        });
-      }
-
-      // Handoff Summary Call ao final do SDR
-      if (avgSdrMsgs > 0) {
-        const summaryPromptChars = promptSdrHandoff;
-        const fullSDRHistory = avgSdrMsgs * (msgLead + respostaIA);
-        const inputChars = summaryPromptChars + supabaseToolsSize + fullSDRHistory;
-        const outputChars = respostaIA;
-        const inputTokens = Math.ceil(inputChars / 3.5);
-        const outputTokens = Math.ceil(outputChars / 3.5);
-
-        let custoSummary = 0;
-        custoSummary = (inputTokens * preçoInput + outputTokens * preçoOutput) / 1_000_000;
-
-        if (gatewayMarkup > 0) {
-          custoSummary = custoSummary * (1 + gatewayMarkup / 100);
-        }
-
-        custoSDRPorLead += custoSummary;
-        totalInputTokens += inputTokens;
-        totalOutputTokens += outputTokens;
-      }
-
-      // 2. CUSTO DE MÚLTIPLOS FLUXOS DE FOLLOW-UP
-      followupFlows.forEach((flow) => {
-        const msgsInThisFlow = flow.days * flow.msgsPerDay;
-        totalFollowMsgsPerLead += msgsInThisFlow;
-
-        // Se a retenção até o final é X%, a média de leads ativos na fila ao longo dos dias é a média entre 100% (início) e X% (fim)
-        const avgRetentionFactor = (1 + (followupRetention / 100)) / 2;
-        const flowActiveQueue = Math.max(0, Math.round(dailyLeadsIntake * flow.days * avgRetentionFactor));
-        const flowDailyMsgs = useDynamicQueue
-          ? flowActiveQueue * flow.msgsPerDay
-          : (activeFollowupsPerDay > 0 ? activeFollowupsPerDay / followupFlows.length : 0);
-        
-        totalDailyFollowMsgs += flowDailyMsgs;
-
-        let flowMsgCost = 0;
-        let flowInputTokens = 0;
-        let flowOutputTokens = 0;
-
-        for (let c = 1; c <= flow.callsPerMsg; c++) {
-          let promptChars = promptFollowPrincipal;
-          let inputChars = 0;
-          let outputChars = respostaIA;
-
-          if (c === 1) {
-            const ctxRuntime = 2000;
-            const last3MsgsHistory = Math.min(3, avgSdrMsgs) * (msgLead + respostaIA);
-            inputChars = promptChars + supabaseToolsSize + ctxRuntime + last3MsgsHistory;
-          } else if (c === 2) {
-            promptChars = promptFollowFracionador;
-            inputChars = promptChars + respostaIA;
-          } else {
-            promptChars = 1000;
-            inputChars = promptChars + respostaIA;
-          }
-
-          const inputTokens = Math.ceil(inputChars / 3.5);
-          const outputTokens = Math.ceil(outputChars / 3.5);
-
-          flowInputTokens += inputTokens;
-          flowOutputTokens += outputTokens;
-
-          let custoCall = 0;
-          custoCall = (inputTokens * preçoInput + outputTokens * preçoOutput) / 1_000_000;
-
-          if (gatewayMarkup > 0) {
-            custoCall = custoCall * (1 + gatewayMarkup / 100);
-          }
-
-          flowMsgCost += custoCall;
-        }
-
-        const flowTotalCostForLead = msgsInThisFlow * flowMsgCost;
-        totalFollowCostPerLead += flowTotalCostForLead;
-
-        for (let j = 1; j <= msgsInThisFlow; j++) {
-          mensagensDetalhes.push({
-            num: mensagensSDR + totalFollowMsgsPerLead - msgsInThisFlow + j,
-            tipo: `Follow (${flow.name})`,
-            inputChars: promptFollowPrincipal + supabaseToolsSize + 2000 + (Math.min(3, avgSdrMsgs) * (msgLead + respostaIA)),
-            outputChars: respostaIA,
-            inputTokens: flowInputTokens,
-            outputTokens: flowOutputTokens,
-            custoMsg: flowMsgCost
-          });
-        }
-      });
-
-      custoMensagemFollow = totalFollowMsgsPerLead > 0 ? totalFollowCostPerLead / totalFollowMsgsPerLead : 0;
-
-    } else {
-      // Modo Direto
-      for (let i = 1; i <= totalMensagens; i++) {
-        let custoMsg = 0;
-        let msgInputTokens = 0;
-        let msgOutputTokens = 0;
-
-        for (let c = 1; c <= chamadasPorMsg; c++) {
-          let promptChars = promptSistema;
-          let inputChars = 0;
-          let outputChars = respostaIA;
-
-          if (c === 1) {
-            const historyChars = (i - 1) * (msgLead + respostaIA);
-            inputChars = promptSistema + supabaseToolsSize + historyChars + msgLead;
-          } else if (c === 2) {
-            promptChars = promptSdrFracionador;
-            inputChars = promptChars + respostaIA;
-          } else {
-            promptChars = 2000;
-            inputChars = promptChars + msgLead;
-          }
-
-          const inputTokens = Math.ceil(inputChars / 3.5);
-          const outputTokens = Math.ceil(outputChars / 3.5);
-
-          let custoCall = 0;
-          custoCall = (inputTokens * preçoInput + outputTokens * preçoOutput) / 1_000_000;
-
-          if (gatewayMarkup > 0) {
-            custoCall = custoCall * (1 + gatewayMarkup / 100);
-          }
-
-          custoMsg += custoCall;
-          msgInputTokens += inputTokens;
-          msgOutputTokens += outputTokens;
-        }
-
-        custoSDRPorLead += custoMsg;
-        totalInputTokens += msgInputTokens;
-        totalOutputTokens += msgOutputTokens;
-
-        mensagensDetalhes.push({
-          num: i,
-          tipo: "SDR",
-          inputChars: promptSistema + supabaseToolsSize + (i - 1) * (msgLead + respostaIA) + msgLead,
-          outputChars: respostaIA,
-          inputTokens: msgInputTokens,
-          outputTokens: msgOutputTokens,
-          custoMsg
-        });
-      }
-    }
-
-    // --- CÁLCULO DE PERÍODOS E CUSTOS TOTAIS PADRONIZADOS ---
     const multiplicadorPeriodo = period === "dia" ? 1 : period === "semana" ? 7 : 30;
 
-    const dailyFollowupMsgs = totalDailyFollowMsgs;
-    const activeQueueSize = Math.round(dailyFollowupMsgs);
+    // Custos unitários e mensais
+    const sdrLeadCostUnit = isUSD ? res.sdrLeadCostUsdBase : res.sdrLeadCostBrlBase;
+    const followLeadCostUnit = isUSD ? res.followLeadCostUsdBase : res.followLeadCostBrlBase;
+    const followMessageCostUnit = isUSD ? res.followMessageCostUsdBase : res.followMessageCostBrlBase;
+    const totalLeadCostUnit = isUSD ? res.totalLeadCostUsdBase : res.totalLeadCostBrlBase;
 
-    // Custo SDR no período e mensal
+    const marginMult = res.safetyMarginMultiplier;
+
+    const sdrCustoMensal = (isUSD ? res.sdrMonthlyCostBrlBase / usdBrlRate : res.sdrMonthlyCostBrlBase) * marginMult;
+    const followCustoMensal = (isUSD ? res.followMonthlyCostBrlBase / usdBrlRate : res.followMonthlyCostBrlBase) * marginMult;
+    const custoMensal = (isUSD ? res.totalMonthlyCostBrlBase / usdBrlRate : res.totalMonthlyCostBrlBase) * marginMult;
+    const custoPeriodo = (custoMensal / 30) * multiplicadorPeriodo;
+
+    const totalLeadsNoPeriodo = leadsPorDia * multiplicadorPeriodo;
     const leadsNoMesProjetado = leadsPorDia * 30;
-    const sdrCustoNoPeriodo = leads * custoSDRPorLead;
-    const sdrCustoMensal = leadsNoMesProjetado * custoSDRPorLead;
 
-    // Custo Follow no período e mensal
-    const followupCustoNoPeriodo = dailyFollowupMsgs * multiplicadorPeriodo * custoMensagemFollow;
-    const followCustoMensal = dailyFollowupMsgs * 30 * custoMensagemFollow;
+    const mensagensSDR = Math.max(1, avgSdrMsgs);
+    const totalFollowMsgsPerLead = res.followIaMsgsPerLead || 1;
+    const mensagensPorLead = mensagensSDR + totalFollowMsgsPerLead;
 
-    // Custos Totais
-    const custoPeriodo = sdrCustoNoPeriodo + followupCustoNoPeriodo;
-    const custoMensal = sdrCustoMensal + followCustoMensal;
-
-    // Custo Total por Lead (SDR + Follow-up do lifecycle completo)
-    const custoFollowPorLead = calcMode === "regua"
-      ? totalFollowCostPerLead
-      : (leadsPorDia > 0 ? (dailyFollowupMsgs * custoMensagemFollow) / leadsPorDia : 0);
-
-    const custoPorLead = custoSDRPorLead + custoFollowPorLead;
-    const mensagensPorLead = avgSdrMsgs + totalFollowMsgsPerLead;
-
-    // Orçamento convertido para BRL
     const orçamentoEmBRL = isUSD ? (budget * usdBrlRate) : budget;
-    const maxLeadsMensal = Math.floor(orçamentoEmBRL / (custoPorLead || 0.0001));
+    const custoPorLeadComMargemBRL = res.totalLeadCostBrlWithMargin || 0.0001;
+    const maxLeadsMensal = Math.floor(orçamentoEmBRL / custoPorLeadComMargemBRL);
     const maxLeadsNoOrcamento = Math.max(0, Math.floor((maxLeadsMensal / 30) * multiplicadorPeriodo));
 
-    const totalChamadasPorLead = (mensagensPorLead) * chamadasPorMsg + (calcMode === "regua" ? 1 : 0);
+    const totalInputTokens = (res.sdrAgentInputTokens + res.sdrFracionaInputTokens + res.sdrHandoffInputTokens) * mensagensSDR;
+    const totalOutputTokens = (res.sdrAgentOutputTokens + res.sdrFracionaOutputTokens + res.sdrHandoffOutputTokens) * mensagensSDR;
+
+    const mensagensDetalhes = [
+      {
+        num: 1,
+        tipo: "SDR Agent Call (Iterativo)",
+        inputChars: promptSistema + supabaseToolsSize + msgLead,
+        outputChars: respostaIA,
+        inputTokens: res.sdrAgentInputTokens,
+        outputTokens: res.sdrAgentOutputTokens,
+        custoMsg: isUSD ? res.sdrMessageCostUsdBase : res.sdrMessageCostBrlBase
+      },
+      {
+        num: 2,
+        tipo: "SDR Handoff Summary (5% Leads)",
+        inputChars: promptSdrHandoff + supabaseToolsSize,
+        outputChars: 500,
+        inputTokens: res.sdrHandoffInputTokens,
+        outputTokens: res.sdrHandoffOutputTokens,
+        custoMsg: isUSD ? res.sdrHandoffCostUsdBase : res.sdrHandoffCostBrlBase
+      },
+      {
+        num: 3,
+        tipo: "Follow-Up (Dia 1 IA)",
+        inputChars: promptFollowPrincipal + 5900,
+        outputChars: respostaIA,
+        inputTokens: res.followAgentInputTokens,
+        outputTokens: res.followAgentOutputTokens,
+        custoMsg: isUSD ? res.followMessageCostUsdBase : res.followMessageCostBrlBase
+      }
+    ];
 
     return {
-      dailyLeadsIntake,
+      dailyLeadsIntake: leadsPorDia,
       leadsNoMesProjetado,
-      activeQueueSize,
-      dailyFollowupMsgs,
-      mensagensSDR: avgSdrMsgs,
-      mensagensFollow: dailyFollowupMsgs,
+      activeQueueSize: Math.round(leadsPorDia * 14 * 0.65),
+      dailyFollowupMsgs: Math.round(leadsPorDia * 1),
+      mensagensSDR,
+      mensagensFollow: Math.round(leadsPorDia * 1),
       mensagensPorLead,
-      totalChamadasPorLead,
-      custoSDRPorLead,
-      custoFollowPorLead,
-      custoMensagemFollow,
-      custoPorLead,
+      totalChamadasPorLead: Math.round(mensagensPorLead * sdrToolLoopFactor),
+      custoSDRPorLead: sdrLeadCostUnit,
+      custoFollowPorLead: followLeadCostUnit,
+      custoMensagemFollow: followMessageCostUnit,
+      custoPorLead: totalLeadCostUnit,
       sdrCustoMensal,
       followCustoMensal,
       custoPeriodo,
       custoMensal,
       maxLeadsNoOrcamento,
-      avgMsgCost: (avgSdrMsgs > 0 || totalFollowMsgsPerLead > 0) ? custoPorLead / Math.max(1, mensagensPorLead) : 0,
+      avgMsgCost: totalLeadCostUnit / Math.max(1, mensagensPorLead),
       totalInputTokens,
       totalOutputTokens,
       periodosPorMes: 30 / multiplicadorPeriodo,
-      mensagensDetalhes
+      mensagensDetalhes,
+      rawFlowResult: res
     };
   }, [
-    calcMode,
-    totalMensagens,
-    chamadasPorMsg,
-    diasFollowup,
-    msgsPorDia,
-    followupFlows,
+    leads,
+    period,
+    selectedModel,
+    selectedTier,
+    avgSdrMsgs,
     promptSistema,
-    promptSdrFracionador,
-    promptFollowPrincipal,
-    promptFollowFracionador,
-    promptSdrHandoff,
+    supabaseToolsSize,
     msgLead,
     respostaIA,
-    selectedModel,
-    period,
-    leads,
-    budget,
-    isUSD,
+    promptSdrFracionador,
+    promptSdrHandoff,
+    promptFollowPrincipal,
+    promptFollowFracionador,
+    sdrToolLoopFactor,
+    diasFollowup,
+    msgsPorDia,
+    useSafetyMargin,
+    safetyMarginPct,
     usdBrlRate,
-    
-    supabaseToolsSize,
-    avgSdrMsgs,
-    activeFollowupsPerDay,
-    useDynamicQueue,
-    followupRetention,
-    gatewayMarkup,
-    selectedTier
+    isUSD,
+    budget
   ]);
 
   // --- ALTERAR MOEDA (com conversão dinâmica de input de orçamento) ---
@@ -1675,11 +1513,18 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                   <div className="grid grid-cols-2 gap-2">
                     {[
                       {
+                        id: "gemini-3-5-flash-lite",
+                        title: "Gemini 3.5 Flash-Lite",
+                        tag: "👑 Campeão de Vendas",
+                        desc: "Raciocínio excelente e custo ultra otimizado para WhatsApp e SDR.",
+                        badge: "Mais Assertivo"
+                      },
+                      {
                         id: "gemini-3-1-flash-lite",
                         title: "Gemini 3.1 Flash-Lite",
-                        tag: "👑 Campeão de Vendas",
-                        desc: "Ultra rápido e o mais barato do mercado. Ideal para WhatsApp.",
-                        badge: "Mais Recomendado"
+                        tag: "💰 Mais Econômico",
+                        desc: "Modelo ultra leve para máximo volume com menor custo por mensagem.",
+                        badge: "Mais Leve"
                       },
                       {
                         id: "gemini-2-5-flash",
@@ -1694,13 +1539,6 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                         tag: "🧠 Vendas Complexas",
                         desc: "Inteligência máxima para negociações B2B de alto valor.",
                         badge: "Alta Performance"
-                      },
-                      {
-                        id: "gpt-4o-mini",
-                        title: "GPT-4o Mini",
-                        tag: "🟢 OpenAI Leve",
-                        desc: "Modelo compacto da OpenAI para atendimentos rápidos.",
-                        badge: "OpenAI"
                       }
                     ].map((mOption) => {
                       const isSelected = selectedModelId === mOption.id;
@@ -1860,22 +1698,55 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-3 pt-2">
-                      {/* Chamadas por Mensagem */}
-                      <div className="space-y-1">
-                        <label className="text-[11px] font-medium text-slate-400">Consultas de IA por msg</label>
-                        <select
-                          value={chamadasPorMsg}
-                          onChange={(e) => setChamadasPorMsg(Number(e.target.value))}
-                          className={`w-full h-8 px-2 rounded-lg border text-xs font-semibold focus:outline-none ${themeClasses.input}`}
-                        >
-                          <option value={1}>1 Chamada Direta</option>
-                          <option value={2}>2 Chamadas (Envio + Validação)</option>
-                          <option value={3}>3 Chamadas (Super Validação)</option>
-                        </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2">
+                      {/* Tool-Loop Factor Slider */}
+                      <div className="space-y-1 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[11px] font-bold text-slate-300">Tool-loop factor (Agent Calls/Msg)</label>
+                          <span className="text-xs font-extrabold text-emerald-400 font-mono">{sdrToolLoopFactor.toFixed(1)}x</span>
+                        </div>
+                        <input
+                          type="range"
+                          min="1.0"
+                          max="4.0"
+                          step="0.1"
+                          value={sdrToolLoopFactor}
+                          onChange={(e) => setSdrToolLoopFactor(parseFloat(e.target.value))}
+                          className="w-full accent-emerald-500 cursor-pointer"
+                        />
+                        <p className="text-[10px] text-slate-400">Iterações médias do agente SDR por mensagem (default 1.5x).</p>
                       </div>
 
-                      {/* Prompt Cache Omitido - Sempre Ativo */}
+                      {/* Contingency / Safety Margin */}
+                      <div className="space-y-1 bg-slate-900/60 p-3 rounded-xl border border-slate-800 flex flex-col justify-between">
+                        <div className="flex justify-between items-center">
+                          <label className="text-[11px] font-bold text-slate-300">Margem de Segurança</label>
+                          <button
+                            type="button"
+                            onClick={() => setUseSafetyMargin(!useSafetyMargin)}
+                            className={`px-2 py-0.5 rounded text-[10px] font-extrabold transition-all ${
+                              useSafetyMargin ? "bg-emerald-500 text-black" : "bg-slate-800 text-slate-400"
+                            }`}
+                          >
+                            {useSafetyMargin ? `ATIVO (+${safetyMarginPct}%)` : "DESATIVADO"}
+                          </button>
+                        </div>
+                        {useSafetyMargin && (
+                          <div className="flex items-center gap-2 pt-1">
+                            <input
+                              type="range"
+                              min="0"
+                              max="100"
+                              step="5"
+                              value={safetyMarginPct}
+                              onChange={(e) => setSafetyMarginPct(parseInt(e.target.value) || 0)}
+                              className="w-full accent-emerald-500 cursor-pointer"
+                            />
+                            <span className="text-xs font-extrabold text-emerald-400 font-mono w-10 text-right">{safetyMarginPct}%</span>
+                          </div>
+                        )}
+                        <p className="text-[10px] text-slate-400">Garante gordura contra retentativas de rede e ruído.</p>
+                      </div>
                     </div>
                   </div>
 
@@ -2786,26 +2657,27 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                 </div>
               </div>
 
-              {/* Chamadas por mensagem */}
+              {/* Tool-loop factor */}
               <div className="space-y-1.5 pt-2 border-t border-slate-800/20">
                 <div className="flex justify-between text-xs font-medium text-slate-400">
-                  <span>Chamadas de API / Msg</span>
-                  <span className="text-emerald-400 font-bold">{chamadasPorMsg}x</span>
+                  <span>Tool-loop factor / Msg</span>
+                  <span className="text-emerald-400 font-bold">{sdrToolLoopFactor.toFixed(1)}x</span>
                 </div>
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[1, 2, 3].map((val) => (
+                <div className="grid grid-cols-4 gap-1.5">
+                  {[1.0, 1.5, 2.0, 3.0].map((val) => (
                     <button
                       key={val}
-                      onClick={() => setChamadasPorMsg(val)}
+                      type="button"
+                      onClick={() => setSdrToolLoopFactor(val)}
                       className={`h-8 text-xs font-bold rounded-lg border transition-all cursor-pointer ${
-                        chamadasPorMsg === val
+                        sdrToolLoopFactor === val
                           ? "bg-emerald-500 text-black border-emerald-500 shadow-sm"
                           : darkMode
                             ? "bg-[#18181b] border-slate-800 hover:bg-slate-800 text-slate-300"
                             : "bg-slate-50 border-slate-200 hover:bg-slate-100 text-slate-700"
                       }`}
                     >
-                      {val}x Call{val > 1 ? "s" : ""}
+                      {val}x
                     </button>
                   ))}
                 </div>
@@ -3214,23 +3086,24 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
               </p>
               <div className="grid sm:grid-cols-2 gap-3">
                 <button
-                  id="load-case-study-real-preset"
+                  id="load-case-study-real-preset-gemini-35"
                   onClick={() => {
-                    setSelectedModelId("gemini-3-1-flash-lite");
+                    setSelectedModelId("gemini-3-5-flash-lite");
                     setSelectedTier("standard");
-                    setLeads(100);
-                    setPeriod("dia");
-                    setAvgSdrMsgs(4);
-                    setActiveFollowupsPerDay(500);
+                    setLeads(250);
+                    setPeriod("mês");
+                    setAvgSdrMsgs(15);
+                    setActiveFollowupsPerDay(250);
                     setSupabaseToolsSize(5000);
-                    setDiasFollowup(14);
+                    setDiasFollowup(10);
                     setMsgsPorDia(1);
+                    setFollowupRetention(30);
                     setPromptSistema(37728);
                     setPromptSdrFracionador(4364);
                     setPromptFollowPrincipal(27213);
                     setPromptFollowFracionador(734);
                     setPromptSdrHandoff(1619);
-                    setGatewayMarkup(300); // 300% markup (4x) to simulate typical Brazilian API gateways/Uniagent markup matching ~R$ 19.60/day
+                    setGatewayMarkup(0);
                     setMsgLead(500);
                     setRespostaIA(800);
                     setChamadasPorMsg(2);
@@ -3240,7 +3113,38 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                   }}
                   className="w-full py-3.5 px-4 bg-emerald-500 text-black hover:bg-emerald-400 font-extrabold text-xs rounded-xl transition-all shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 cursor-pointer sm:col-span-2"
                 >
-                  <span>🚀 Cenário Real SDR/Follow (~R$ 18,00 a R$ 20,00/dia, 100 leads SDR e 500 follow-ups ativos)</span>
+                  <span>🎯 Cenário Comercial Assertivo Gemini 3.5 Flash-Lite (API Direta: ~R$ 157,58/mês | Com Gateway Integrador 4x: ~R$ 630/mês | 250 leads)</span>
+                  <ArrowRight className="h-4 w-4 stroke-[2.5]" />
+                </button>
+
+                <button
+                  id="load-case-study-real-preset"
+                  onClick={() => {
+                    setSelectedModelId("gemini-3-5-flash-lite");
+                    setSelectedTier("standard");
+                    setLeads(100);
+                    setPeriod("dia");
+                    setAvgSdrMsgs(8);
+                    setActiveFollowupsPerDay(500);
+                    setSupabaseToolsSize(5000);
+                    setDiasFollowup(14);
+                    setMsgsPorDia(1);
+                    setPromptSistema(37728);
+                    setPromptSdrFracionador(4364);
+                    setPromptFollowPrincipal(27213);
+                    setPromptFollowFracionador(734);
+                    setPromptSdrHandoff(1619);
+                    setGatewayMarkup(0);
+                    setMsgLead(500);
+                    setRespostaIA(800);
+                    setChamadasPorMsg(2);
+                    setIsUSD(false);
+                    setUsdBrlRate(5.11);
+                    setActiveMainTab("simulator");
+                  }}
+                  className="w-full py-3.5 px-4 bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer sm:col-span-2"
+                >
+                  <span>🚀 Cenário de Alto Volume Gemini 3.5 Flash-Lite (100 leads/dia + 500 follow-ups/dia)</span>
                   <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                 </button>
 
@@ -3249,15 +3153,17 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                   onClick={() => {
                     setSelectedModelId("gemini-3-1-flash-lite");
                     setSelectedTier("standard");
-                    setLeads(16);
+                    setLeads(250);
+                    setPeriod("mês");
                     setUsdBrlRate(5.11);
                     setCalcMode("regua");
-                    setAvgSdrMsgs(4);
-                    setActiveFollowupsPerDay(100);
-                    setSupabaseToolsSize(0);
-                    setDiasFollowup(14);
+                    setAvgSdrMsgs(15);
+                    setActiveFollowupsPerDay(250);
+                    setSupabaseToolsSize(5000);
+                    setDiasFollowup(10);
                     setMsgsPorDia(1);
                     setPromptSistema(37728);
+                    setGatewayMarkup(0);
                     setMsgLead(500);
                     setRespostaIA(800);
                     setChamadasPorMsg(2);
@@ -3266,22 +3172,24 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                   }}
                   className="w-full py-3.5 px-4 bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>🔥 Gemini 3.1 Flash-Lite (Econômico - Tempo Real)</span>
+                  <span>🔥 Gemini 3.1 Flash-Lite (API Direta: ~R$ 110,31/mês | 250 leads)</span>
                   <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                 </button>
 
                 <button
                   id="load-case-study-gemini-flash"
                   onClick={() => {
-                    setSelectedModelId("gemini-2-0-flash");
+                    setSelectedModelId("gemini-2-5-flash");
                     setSelectedTier("standard");
-                    setLeads(16);
+                    setLeads(250);
+                    setPeriod("mês");
                     setUsdBrlRate(5.11);
                     setCalcMode("regua");
-                    setAvgSdrMsgs(4);
-                    setDiasFollowup(14);
+                    setAvgSdrMsgs(15);
+                    setDiasFollowup(10);
                     setMsgsPorDia(1);
                     setPromptSistema(37728);
+                    setGatewayMarkup(0);
                     setMsgLead(500);
                     setRespostaIA(800);
                     setChamadasPorMsg(2);
@@ -3290,22 +3198,24 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                   }}
                   className="w-full py-3.5 px-4 bg-slate-800 text-slate-100 hover:bg-slate-700 border border-slate-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
-                  <span>⚡ Gemini 2.0 Flash (Produção)</span>
+                  <span>⚡ Gemini 2.5 Flash (API Direta: ~R$ 157,58/mês | 250 leads)</span>
                   <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                 </button>
 
                 <button
                   id="load-case-study-gpt4o"
                   onClick={() => {
-                    setSelectedModelId("gpt-4o");
+                    setSelectedModelId("gpt-4o-mini");
                     setSelectedTier("standard");
-                    setLeads(16);
+                    setLeads(250);
+                    setPeriod("mês");
                     setUsdBrlRate(5.11);
                     setCalcMode("regua");
-                    setAvgSdrMsgs(4);
-                    setDiasFollowup(14);
+                    setAvgSdrMsgs(15);
+                    setDiasFollowup(10);
                     setMsgsPorDia(1);
                     setPromptSistema(37728);
+                    setGatewayMarkup(0);
                     setMsgLead(500);
                     setRespostaIA(800);
                     setChamadasPorMsg(2);
@@ -3314,7 +3224,7 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
                   }}
                   className="w-full py-3.5 px-4 bg-slate-900 text-slate-300 hover:bg-slate-800 border border-slate-800 font-bold text-xs rounded-xl transition-all flex items-center justify-center gap-2 cursor-pointer sm:col-span-2"
                 >
-                  <span>Comparativo GPT-4o OpenAI (16 leads)</span>
+                  <span>Comparativo GPT-4o Mini OpenAI (API Direta: ~R$ 62,08/mês | 250 leads)</span>
                   <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                 </button>
               </div>

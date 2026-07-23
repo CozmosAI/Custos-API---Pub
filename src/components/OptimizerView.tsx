@@ -41,7 +41,6 @@ export const OptimizerView: React.FC = () => {
         color: provider?.color || "#888",
         inputPricePer1M: m.inputPricePer1M,
         outputPricePer1M: m.outputPricePer1M,
-        cacheDiscount: m.cacheDiscount,
         contextWindow: m.contextWindow,
         modality: m.modality
       };
@@ -52,14 +51,12 @@ export const OptimizerView: React.FC = () => {
     return optimizeForBudget(effectiveParams, flatModels, budgetInput);
   }, [effectiveParams, flatModels, budgetInput]);
 
-  // Análise de sensibilidade de $5 a $500
   const sensitivity = useMemo(() => {
-    return sensitivityAnalysis(effectiveParams, flatModels, 5, 500, 20);
+    return sensitivityAnalysis(effectiveParams, flatModels);
   }, [effectiveParams, flatModels]);
 
   const filtered = useMemo(() => {
     let r = output.results;
-    if (filterCache) r = r.filter(x => x.cacheDiscount > 0);
     if (filterVision) r = r.filter(x => x.modality.includes("vision"));
 
     const sorted = [...r];
@@ -71,18 +68,16 @@ export const OptimizerView: React.FC = () => {
       sorted.sort((a, b) => a.costPerMessage - b.costPerMessage);
     }
     return sorted;
-  }, [output.results, sortKey, filterCache, filterVision]);
+  }, [output.results, sortKey, filterVision]);
 
   const best = output.best;
   const maxLeadsAmongFiltered = filtered[0]?.maxLeadsInBudget ?? 0;
 
-  const handleApplyModel = (label: string, inputPrice: number, outputPrice: number, cacheDiscount: number) => {
+  const handleApplyModel = (label: string, inputPrice: number, outputPrice: number) => {
     setSelectedModelLabel(label);
     setParams({
       inputPricePer1M: inputPrice,
       outputPricePer1M: outputPrice,
-      cacheDiscount,
-      useCache: cacheDiscount > 0,
       monthlyBudget: budgetInput,
       maxLeadsPerDay
     });
@@ -154,9 +149,6 @@ export const OptimizerView: React.FC = () => {
               <div className="flex items-center gap-2">
                 <span className="h-3 w-3 rounded-full" style={{ backgroundColor: best.color || "#888" }} />
                 <h4 className="font-bold text-gray-100">{best.providerName} {best.modelName}</h4>
-                {best.cacheDiscount > 0 && (
-                  <span className="bg-emerald-950 border border-emerald-900/40 text-[9px] text-emerald-400 px-2 py-0.5 rounded font-bold">Cache</span>
-                )}
               </div>
               <p className="text-xs text-gray-400 mt-1">Este modelo entrega a maior capacidade de leads possíveis dentro de seu orçamento.</p>
             </div>
@@ -168,7 +160,7 @@ export const OptimizerView: React.FC = () => {
               <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider">Leads / Mês</p>
             </div>
             <button
-              onClick={() => handleApplyModel(best.id, best.inputPricePer1M, best.outputPricePer1M, best.cacheDiscount)}
+              onClick={() => handleApplyModel(best.id, best.inputPricePer1M, best.outputPricePer1M)}
               className="bg-primary hover:bg-primary/95 text-white text-xs font-bold px-3 py-2 rounded-lg shadow-md transition-all whitespace-nowrap"
             >
               Usar no Simulador
@@ -254,7 +246,7 @@ export const OptimizerView: React.FC = () => {
                 </div>
 
                 <button
-                  onClick={() => handleApplyModel(r.id, r.inputPricePer1M, r.outputPricePer1M, r.cacheDiscount)}
+                  onClick={() => handleApplyModel(r.id, r.inputPricePer1M, r.outputPricePer1M)}
                   className="bg-gray-900 hover:bg-gray-800 border border-gray-800 text-[10px] font-bold px-2 py-1.5 rounded transition-all shrink-0"
                 >
                   Selecionar

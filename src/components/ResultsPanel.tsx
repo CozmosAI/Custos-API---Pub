@@ -22,7 +22,8 @@ import {
   Zap, 
   Target, 
   Cpu, 
-  Download 
+  Download,
+  ShieldAlert
 } from "lucide-react";
 
 interface ResultsPanelProps {
@@ -66,15 +67,13 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = () => {
   // Exportar dados de mensagens para CSV
   const handleExportCSV = () => {
     const rows: string[][] = [
-      ["ID Mensagem", "Tokens Entrada", "Tokens Cache", "Tokens Novos", "Tokens Saída", "Custo Mensal por Lead ($)"]
+      ["ID Mensagem", "Tokens Entrada", "Tokens Saída", "Custo Mensal por Lead ($)"]
     ];
 
     result.conversation.messageBreakdown.forEach((m) => {
       rows.push([
         String(m.index),
         String(m.inputTokens),
-        String(m.cachedTokens),
-        String(m.freshTokens),
         String(m.outputTokens),
         m.cost.toFixed(6)
       ]);
@@ -170,15 +169,16 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = () => {
         </div>
       )}
 
-      {/* Banner de Prompt Caching se houver economia significativa */}
-      {result.useCache && result.cacheDiscount > 0 && result.monthlyCacheSavings > 0.05 && (
-        <div className="bg-emerald-950/20 border border-emerald-900/40 rounded-xl p-4 text-xs text-emerald-400 flex items-start gap-3">
-          <Zap className="h-5 w-5 shrink-0 text-emerald-500 animate-pulse" />
+
+
+      {/* Banner de Margem de Segurança / Contingência */}
+      {params.useSafetyMargin && params.safetyMarginPct > 0 && (
+        <div className="bg-amber-950/20 border border-amber-900/40 rounded-xl p-4 text-xs text-amber-400 flex items-start gap-3">
+          <ShieldAlert className="h-5 w-5 shrink-0 text-amber-400" />
           <div className="leading-relaxed">
-            <p className="font-bold text-emerald-300">Prompt Caching está economizando {formatMoney(result.monthlyCacheSavings, currency, usdToBrl, 2)} / mês!</p>
+            <p className="font-bold text-amber-300">Margem de Erro / Segurança (+{params.safetyMarginPct}%) Ativa</p>
             <p className="text-gray-400 mt-1">
-              Sem otimização de cache, você gastaria <strong>{formatMoney(result.monthlyEquivalentCost + result.monthlyCacheSavings, currency, usdToBrl, 2)}</strong> mensais. 
-              Com a retenção de contexto, o custo caiu para <strong>{formatMoney(result.monthlyEquivalentCost, currency, usdToBrl, 2)}</strong> (economia de <strong>{result.conversation.cacheSavingsPct.toFixed(0)}%</strong>).
+              Os custos calculados acima já incluem um acréscimo de <strong>+{params.safetyMarginPct}%</strong> de margem financeira de contingência para cobrir variações de uso e mensagens atípicas.
             </p>
           </div>
         </div>
@@ -365,8 +365,6 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = () => {
               <tr className="border-b border-gray-800 text-gray-400 font-semibold bg-gray-950 sticky top-0 z-10">
                 <th className="py-2 px-3 text-center">Interação</th>
                 <th className="py-2 px-3">Tokens Entrada</th>
-                <th className="py-2 px-3">Tokens Cache (Desconto)</th>
-                <th className="py-2 px-3">Tokens Novos (Cheio)</th>
                 <th className="py-2 px-3">Tokens Saída</th>
                 <th className="py-2 px-3 text-right">Custo Msg</th>
                 <th className="py-2 px-3 text-right">Custo Acumulado</th>
@@ -374,26 +372,13 @@ export const ResultsPanel: React.FC<ResultsPanelProps> = () => {
             </thead>
             <tbody className="divide-y divide-gray-900/40 text-gray-300 font-medium">
               {result.conversation.messageBreakdown.map((m) => {
-                const savingPercent = m.costWithoutCache > m.cost
-                  ? Math.round((1 - m.cost / m.costWithoutCache) * 100)
-                  : 0;
-
                 return (
                   <tr key={m.index} className="hover:bg-gray-900/20 transition-colors">
                     <td className="py-2.5 px-3 text-center text-gray-500 font-mono">#{m.index}</td>
                     <td className="py-2.5 px-3 tabular-nums">{formatTokens(m.inputTokens)}</td>
-                    <td className="py-2.5 px-3 text-emerald-500 tabular-nums">
-                      {formatTokens(m.cachedTokens)}
-                    </td>
-                    <td className="py-2.5 px-3 text-purple-400 tabular-nums">{formatTokens(m.freshTokens)}</td>
                     <td className="py-2.5 px-3 text-sky-400 tabular-nums">{formatTokens(m.outputTokens)}</td>
                     <td className="py-2.5 px-3 text-right font-bold tabular-nums">
-                      <div className="flex flex-col items-end">
-                        <span>{formatMoney(m.cost, currency, usdToBrl, 2)}</span>
-                        {savingPercent > 0 && (
-                          <span className="text-[8px] text-emerald-400 font-bold">-{savingPercent}% cache</span>
-                        )}
-                      </div>
+                      <span>{formatMoney(m.cost, currency, usdToBrl, 2)}</span>
                     </td>
                     <td className="py-2.5 px-3 text-right text-gray-400 tabular-nums">{formatMoney(m.cumulativeCost, currency, usdToBrl, 2)}</td>
                   </tr>

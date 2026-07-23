@@ -25,8 +25,6 @@ export const CompareView: React.FC = () => {
         ...params,
         inputPricePer1M: m.inputPricePer1M,
         outputPricePer1M: m.outputPricePer1M,
-        cacheDiscount: m.cacheDiscount,
-        useCache: m.cacheDiscount > 0
       };
       const r = simulate(simParams);
       return {
@@ -45,13 +43,11 @@ export const CompareView: React.FC = () => {
 
   const cheapest = sorted[0];
 
-  const handleApplyModel = (providerId: string, modelId: string, inputPrice: number, outputPrice: number, cacheDiscount: number) => {
+  const handleApplyModel = (providerId: string, modelId: string, inputPrice: number, outputPrice: number) => {
     setSelectedModelLabel(`${providerId}||${modelId}`);
     setParams({
       inputPricePer1M: inputPrice,
       outputPricePer1M: outputPrice,
-      cacheDiscount,
-      useCache: cacheDiscount > 0
     });
     setView("simulator");
   };
@@ -121,7 +117,7 @@ export const CompareView: React.FC = () => {
             </p>
           </div>
           <button
-            onClick={() => handleApplyModel(cheapest.model.providerId, cheapest.model.id, cheapest.model.inputPricePer1M, cheapest.model.outputPricePer1M, cheapest.model.cacheDiscount)}
+            onClick={() => handleApplyModel(cheapest.model.providerId, cheapest.model.id, cheapest.model.inputPricePer1M, cheapest.model.outputPricePer1M)}
             className="bg-emerald-500 hover:bg-emerald-400 text-gray-950 text-xs font-bold px-3 py-1.5 rounded-lg shadow-sm transition-all whitespace-nowrap"
           >
             Aplicar no Simulador
@@ -191,7 +187,6 @@ export const CompareView: React.FC = () => {
               <tr className="border-b border-gray-800 text-gray-400 font-semibold bg-gray-950 sticky top-0 z-10">
                 <th className="py-2 px-3">Modelo</th>
                 <th className="py-2 px-3 text-center">Preço Input/Output</th>
-                <th className="py-2 px-3 text-center">Cache</th>
                 <th className="py-2 px-3 text-right">Custo / Msg</th>
                 <th className="py-2 px-3 text-right">Custo / Lead</th>
                 <th className="py-2 px-3 text-right">Custo Mensal Est.</th>
@@ -222,16 +217,6 @@ export const CompareView: React.FC = () => {
                     <td className="py-2.5 px-3 text-center text-gray-400 font-mono">
                       ${s.model.inputPricePer1M.toFixed(2)} / ${s.model.outputPricePer1M.toFixed(2)}
                     </td>
-                    <td className="py-2.5 px-3 text-center">
-                      {s.model.cacheDiscount > 0 ? (
-                        <span className="inline-flex items-center gap-0.5 bg-emerald-950 text-emerald-400 border border-emerald-900/50 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                          <Zap className="h-2.5 w-2.5" />
-                          {(s.model.cacheDiscount * 100).toFixed(0)}%
-                        </span>
-                      ) : (
-                        <span className="text-gray-600 text-[10px] font-bold">—</span>
-                      )}
-                    </td>
                     <td className="py-2.5 px-3 text-right tabular-nums">
                       {formatMoney(s.result.perMessage, currency, usdToBrl, 2)}
                     </td>
@@ -253,7 +238,7 @@ export const CompareView: React.FC = () => {
                     </td>
                     <td className="py-2.5 px-3 text-right">
                       <button
-                        onClick={() => handleApplyModel(s.model.providerId, s.model.id, s.model.inputPricePer1M, s.model.outputPricePer1M, s.model.cacheDiscount)}
+                        onClick={() => handleApplyModel(s.model.providerId, s.model.id, s.model.inputPricePer1M, s.model.outputPricePer1M)}
                         className="bg-gray-900 border border-gray-800 hover:border-primary/50 text-gray-300 hover:text-white text-[10px] font-bold px-2 py-1 rounded"
                       >
                         Aplicar

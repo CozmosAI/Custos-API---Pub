@@ -38,8 +38,7 @@ export const BreakEvenView: React.FC<BreakEvenViewProps> = () => {
         providerName: provider?.name || "",
         color: provider?.color || "#888",
         inputPricePer1M: m.inputPricePer1M,
-        outputPricePer1M: m.outputPricePer1M,
-        cacheDiscount: m.cacheDiscount
+        outputPricePer1M: m.outputPricePer1M
       };
     });
   }, [models, providers]);
@@ -64,8 +63,6 @@ export const BreakEvenView: React.FC<BreakEvenViewProps> = () => {
     setParams({
       inputPricePer1M: modelB.inputPricePer1M,
       outputPricePer1M: modelB.outputPricePer1M,
-      cacheDiscount: modelB.cacheDiscount,
-      useCache: modelB.cacheDiscount > 0
     });
     setView("simulator");
   };
