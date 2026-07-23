@@ -3840,23 +3840,25 @@ Como posso te ajudar hoje?`
                     </div>
                   </div>
 
-                  {/* SEÇÃO 2: CUSTOS OPERACIONAIS — INFRAESTRUTURA */}
+                  {/* SEÇÃO 2: CUSTOS OPERACIONAIS (RECORRENTES MENSALMENTE) */}
                   <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
                     <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
                       <div className="flex items-center gap-2">
                         <Server className="h-4 w-4 text-blue-400" />
                         <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                          🖥️ Custos Operacionais — Infraestrutura
+                          🖥️ Custos Operacionais e Manutenção (Recorrentes)
                         </h4>
                       </div>
                       <span className="text-xs font-mono font-bold text-blue-400">
-                        R$ {opReport.infrastructureMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
+                        R$ {(opReport.infrastructureMonthly + opReport.laborMonthly).toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
                       </span>
                     </div>
 
                     <div className="space-y-2.5 text-xs">
-                      {operationalParams.items.filter(i => i.category === "infra").map((item) => {
+                      {operationalParams.items.filter(i => i.category === "infra" || i.category === "labor").map((item) => {
                         const isUazapi = item.id === "uazapi";
+                        const isCrm = item.id === "crm_monthly";
+                        const isMaintenance = item.id === "maintenance";
                         return (
                           <div
                             key={item.id}
@@ -3878,13 +3880,18 @@ Como posso te ajudar hoje?`
                                     items: prev.items.map(it => it.id === item.id ? { ...it, enabled: checked } : it)
                                   }));
                                 }}
-                                className="rounded border-slate-700 accent-blue-500 cursor-pointer h-4 w-4 shrink-0"
+                                className={`rounded border-slate-700 cursor-pointer h-4 w-4 shrink-0 ${isMaintenance ? 'accent-purple-500' : 'accent-blue-500'}`}
                               />
                               <label htmlFor={`toggle-item-${item.id}`} className="font-medium text-slate-200 cursor-pointer truncate flex items-center gap-1.5">
-                                {isUazapi ? "💬 Uazapi (WhatsApp API)" : item.label}
+                                {item.label}
                                 {isUazapi && (
                                   <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
                                     API WhatsApp
+                                  </span>
+                                )}
+                                {isCrm && (
+                                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-blue-500/20 text-blue-400 border border-blue-500/30">
+                                    CRM SaaS
                                   </span>
                                 )}
                               </label>
@@ -3922,17 +3929,17 @@ Como posso te ajudar hoje?`
                       <div className="flex items-center gap-2">
                         <Wrench className="h-4 w-4 text-purple-400" />
                         <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
-                          🔧 Implementação
+                          🔧 Implementação (Setup Inicial)
                         </h4>
                       </div>
                       <span className="text-xs font-mono font-bold text-purple-400">
-                        Manutenção: R$ {opReport.laborMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
+                        Total Setup: R$ {opReport.setupOneTime.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}
                       </span>
                     </div>
 
                     <div className="space-y-2.5 text-xs">
-                      {/* Item Manutenção Mensal */}
-                      {operationalParams.items.filter(i => i.category === "labor").map((item) => (
+                      {/* Item Setup Único (One-time) */}
+                      {operationalParams.items.filter(i => i.category === "setup").map((item) => (
                         <div
                           key={item.id}
                           className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
@@ -3955,9 +3962,16 @@ Como posso te ajudar hoje?`
                               }}
                               className="rounded border-slate-700 accent-purple-500 cursor-pointer h-4 w-4 shrink-0"
                             />
-                            <label htmlFor={`toggle-item-${item.id}`} className="font-medium text-slate-200 cursor-pointer truncate">
-                              🔧 Manutenção e Suporte Mensal
-                            </label>
+                            <div>
+                              <label htmlFor={`toggle-item-${item.id}`} className="font-medium text-slate-200 cursor-pointer truncate block">
+                                {item.label}
+                              </label>
+                              <span className="text-[10px] text-slate-400 block">
+                                {item.id === "flowbuild"
+                                  ? "Construção de fluxos n8n, banco de dados e integrações"
+                                  : "Estruturação de funis, pipelines e integrações de vendas"}
+                              </span>
+                            </div>
                           </div>
 
                           <div className="flex items-center gap-1.5 shrink-0">
@@ -3966,109 +3980,104 @@ Como posso te ajudar hoje?`
                               type="number"
                               id={`input-item-val-${item.id}`}
                               disabled={!item.enabled}
-                              value={item.monthlyValue}
+                              value={item.oneTimeValue || 0}
                               onChange={(e) => {
                                 const val = parseFloat(e.target.value) || 0;
                                 setOperationalParams(prev => ({
                                   ...prev,
-                                  items: prev.items.map(it => it.id === item.id ? { ...it, monthlyValue: val } : it)
+                                  items: prev.items.map(it => it.id === item.id ? { ...it, oneTimeValue: val } : it)
                                 }));
                               }}
                               className={`w-24 h-8 px-2.5 rounded border font-mono text-xs text-right ${
                                 item.enabled ? themeClasses.input : "bg-slate-950 text-slate-500 border-slate-800"
                               }`}
                             />
-                            <span className="text-[10px] text-slate-500 font-mono">/mês</span>
+                            <span className="text-[10px] text-amber-400 font-mono font-bold">(setup)</span>
                           </div>
                         </div>
                       ))}
 
-                      {/* Item Setup Único (One-time) */}
-                      {operationalParams.items.filter(i => i.category === "setup").map((item) => (
-                        <div
-                          key={item.id}
-                          className={`flex flex-col p-3 rounded-lg border transition-all ${
-                            item.enabled
-                              ? "bg-slate-900 border-slate-700/80"
-                              : "bg-slate-950/50 border-slate-800/40 opacity-60"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between w-full">
-                            <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-2">
-                              <input
-                                type="checkbox"
-                                id={`toggle-item-${item.id}`}
-                                checked={item.enabled}
-                                onChange={(e) => {
-                                  const checked = e.target.checked;
-                                  setOperationalParams(prev => ({
-                                    ...prev,
-                                    items: prev.items.map(it => it.id === item.id ? { ...it, enabled: checked } : it)
-                                  }));
-                                }}
-                                className="rounded border-slate-700 accent-slate-400 cursor-pointer h-4 w-4 shrink-0"
-                              />
-                              <div>
-                                <label htmlFor={`toggle-item-${item.id}`} className="font-medium text-slate-200 cursor-pointer truncate block">
-                                  🚧 Montagem dos Fluxos (Setup Inicial)
-                                </label>
-                                <span className="text-[10px] text-slate-400 block">Primeiro mês sem mensalidade recorrente</span>
-                              </div>
-                            </div>
-
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <span className="text-slate-400 text-xs">R$</span>
-                              <input
-                                type="number"
-                                id={`input-item-val-${item.id}`}
-                                disabled={!item.enabled}
-                                value={item.oneTimeValue || 0}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  setOperationalParams(prev => ({
-                                    ...prev,
-                                    items: prev.items.map(it => it.id === item.id ? { ...it, oneTimeValue: val } : it)
-                                  }));
-                                }}
-                                className={`w-24 h-8 px-2.5 rounded border font-mono text-xs text-right ${
-                                  item.enabled ? themeClasses.input : "bg-slate-950 text-slate-500 border-slate-800"
-                                }`}
-                              />
-                              <span className="text-[10px] text-amber-400 font-mono font-bold">(setup)</span>
-                            </div>
+                      {/* Condições globais de pagamento do Setup */}
+                      {opReport.setupOneTime > 0 && (
+                        <div className="p-3.5 rounded-lg border border-purple-500/30 bg-purple-950/20 space-y-3 mt-1">
+                          <div className="flex items-center gap-1 text-xs font-bold text-purple-400 uppercase tracking-wider">
+                            <span>💳 Condições de Pagamento (Setup Inicial)</span>
                           </div>
 
-                          {item.enabled && (
-                            <div className="mt-3 pt-2.5 border-t border-slate-800 flex items-center justify-between gap-2 flex-wrap">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                            {/* Entrada (Down Payment) */}
+                            <div className="space-y-1">
+                              <label className="text-slate-300 font-medium flex justify-between text-[11px]">
+                                <span>Porcentagem de Entrada:</span>
+                                <span className="font-mono text-purple-300 font-bold">{(operationalParams.setupDownPaymentPercent !== undefined ? operationalParams.setupDownPaymentPercent : 50)}%</span>
+                              </label>
                               <div className="flex items-center gap-2">
-                                <span className="text-[11px] text-slate-400 font-medium">Parcelar o Setup em:</span>
-                                <select
-                                  id="setup-installments-selector"
-                                  value={operationalParams.setupInstallments || 1}
+                                <input
+                                  type="range"
+                                  min="0"
+                                  max="100"
+                                  step="10"
+                                  value={operationalParams.setupDownPaymentPercent !== undefined ? operationalParams.setupDownPaymentPercent : 50}
                                   onChange={(e) => {
-                                    const inst = parseInt(e.target.value) || 1;
+                                    const pct = parseInt(e.target.value) || 0;
                                     setOperationalParams(prev => ({
                                       ...prev,
-                                      setupInstallments: inst
+                                      setupDownPaymentPercent: pct
                                     }));
                                   }}
-                                  className="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2.5 py-1 focus:outline-none focus:border-purple-500 font-mono"
-                                >
-                                  {[1, 2, 3, 4, 5, 6, 8, 10, 12].map(n => (
-                                    <option key={n} value={n}>{n}x</option>
-                                  ))}
-                                </select>
+                                  className="flex-1 accent-purple-500 cursor-pointer h-1 bg-slate-800 rounded-lg appearance-none"
+                                />
                               </div>
-                              <span className="text-[11px] text-purple-400 font-mono font-bold">
-                                {(operationalParams.setupInstallments || 1) > 1
-                                  ? `${operationalParams.setupInstallments}x de R$ ${((item.oneTimeValue || 0) / (operationalParams.setupInstallments || 1)).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-                                  : "À vista"
-                                }
-                              </span>
                             </div>
-                          )}
+
+                            {/* Parcelamento do Resto */}
+                            <div className="space-y-1">
+                              <label className="text-slate-300 font-medium block text-[11px]">
+                                Parcelar o Saldo Restante em:
+                              </label>
+                              <select
+                                id="setup-installments-selector"
+                                value={operationalParams.setupInstallments || 1}
+                                onChange={(e) => {
+                                  const inst = parseInt(e.target.value) || 1;
+                                  setOperationalParams(prev => ({
+                                    ...prev,
+                                    setupInstallments: inst
+                                  }));
+                                }}
+                                className="w-full bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2.5 py-1.5 focus:outline-none focus:border-purple-500 font-mono"
+                              >
+                                <option value={1}>À vista (Sem parcelas)</option>
+                                {[2, 3, 4, 5, 6, 8, 10, 12].map(n => (
+                                  <option key={n} value={n}>{n}x</option>
+                                ))}
+                              </select>
+                            </div>
+                          </div>
+
+                          {/* Resumo Dinâmico do Setup */}
+                          <div className="pt-2 border-t border-slate-800/80 text-[11px] font-mono flex flex-col gap-1 text-slate-400">
+                            <div className="flex justify-between">
+                              <span>Total do Setup:</span>
+                              <span className="font-bold text-slate-200">R$ {opReport.setupOneTime.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Entrada ({(operationalParams.setupDownPaymentPercent !== undefined ? operationalParams.setupDownPaymentPercent : 50)}%):</span>
+                              <span className="font-bold text-amber-400">R$ {opReport.setupDownPaymentValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            <div className="flex justify-between">
+                              <span>Saldo Restante:</span>
+                              <span className="text-slate-300">R$ {(opReport.setupOneTime - opReport.setupDownPaymentValue).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                            </div>
+                            {opReport.setupInstallments > 1 && (
+                              <div className="flex justify-between border-t border-slate-800/50 pt-1 text-purple-300">
+                                <span>Valor das Parcelas ({opReport.setupInstallments}x):</span>
+                                <span className="font-bold">R$ {opReport.setupInstallmentValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} /mês</span>
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      ))}
+                      )}
 
                       {/* Detalhamento técnico do Setup em acordeão */}
                       <div className="mt-1 border border-slate-800 rounded-lg overflow-hidden bg-slate-950/30">
@@ -4078,21 +4087,40 @@ Como posso te ajudar hoje?`
                           className="w-full flex items-center justify-between p-2.5 text-left text-[11px] font-semibold text-slate-300 hover:bg-slate-800/40 transition-colors"
                         >
                           <span className="flex items-center gap-1.5 text-purple-400">
-                            💡 Em que é baseado este custo de Implementação?
+                            💡 Em que são baseados estes custos de Implementação?
                           </span>
                           <span className="text-xs text-slate-500 font-mono">{showSetupDetails ? "Recolher ▲" : "Ver detalhes ▼"}</span>
                         </button>
                         {showSetupDetails && (
-                          <div className="p-3 text-[11px] text-slate-400 border-t border-slate-800 bg-slate-950/50 space-y-2 leading-relaxed">
-                            <p>
-                              O valor padrão de <strong>R$ 3.200,00</strong> é calculado de forma técnica com base em <strong>40 Horas de Engenharia de Automação e IA</strong> (taxa de R$ 80,00/hora de mercado):
-                            </p>
-                            <ul className="list-disc pl-4 space-y-1 text-slate-300">
-                              <li><strong>10h - Banco de Dados (Supabase)</strong>: Criação de esquemas de leads, gravação de logs de conversas estruturadas, regras de segurança.</li>
-                              <li><strong>12h - N8N Workflows Avançados</strong>: Construção do fluxo de atendimento receptivo, motor de follow-up resiliente, roteamento de transbordo humano e tratamento de erros.</li>
-                              <li><strong>10h - Integração da API de WhatsApp (Uazapi)</strong>: Configuração de webhooks em tempo real, disparo ativo de mídias, tratamento de status de envio e sincronia de filas.</li>
-                              <li><strong>8h - Engenharia de Prompt e Testes</strong>: Setup de contexto do Gemini, afinação de temperatura, validações de custos reais e margem de segurança.</li>
-                            </ul>
+                          <div className="p-3 text-[11px] text-slate-400 border-t border-slate-800 bg-slate-950/50 space-y-2.5 leading-relaxed">
+                            <div>
+                              <p className="mb-1 text-slate-300 font-semibold text-[11px]">
+                                🚧 1. Montagem dos Fluxos (R$ 3.200,00):
+                              </p>
+                              <p className="text-[10px] text-slate-400">
+                                Calculado com base em <strong>40 Horas de Engenharia de Automação e IA</strong> (taxa de R$ 80,00/hora de mercado):
+                              </p>
+                              <ul className="list-disc pl-4 mt-1 space-y-0.5 text-[10px] text-slate-300">
+                                <li><strong>10h - Banco de Dados (Supabase)</strong>: Criação de esquemas de leads, gravação de logs de conversas estruturadas, regras de segurança.</li>
+                                <li><strong>12h - N8N Workflows Avançados</strong>: Construção do fluxo de atendimento receptivo, motor de follow-up resiliente, roteamento de transbordo humano e tratamento de erros.</li>
+                                <li><strong>10h - Integração da API de WhatsApp (Uazapi)</strong>: Configuração de webhooks em tempo real, disparo ativo de mídias, tratamento de status de envio e sincronia de filas.</li>
+                                <li><strong>8h - Engenharia de Prompt e Testes</strong>: Setup de contexto do Gemini, afinação de temperatura, validações de custos reais e margem de segurança.</li>
+                              </ul>
+                            </div>
+
+                            <div className="pt-2 border-t border-slate-800/80">
+                              <p className="mb-1 text-slate-300 font-semibold text-[11px]">
+                                🏗️ 2. Criação e Setup do CRM (R$ 1.500,00):
+                              </p>
+                              <p className="text-[10px] text-slate-400">
+                                Estruturação e homologação comercial baseada em <strong>20 Horas de Engenharia e Consultoria de Processos</strong>:
+                              </p>
+                              <ul className="list-disc pl-4 mt-1 space-y-0.5 text-[10px] text-slate-300">
+                                <li><strong>6h - Arquitetura de Pipelines</strong>: Criação de funis de vendas personalizados (Contatos, Qualificação, Apresentação, Fechamento).</li>
+                                <li><strong>8h - Integração e Webhooks</strong>: Sincronização automática de dados entre os fluxos do n8n e o CRM, atualizando estágios e inserindo logs em tempo real.</li>
+                                <li><strong>6h - Treinamento e Automação de E-mails/Cobrança</strong>: Configuração de regras automatizadas de follow-up pós-venda, templates de e-mails de transbordo e relatórios.</li>
+                              </ul>
+                            </div>
                             <div className="pt-1.5 border-t border-slate-800 flex items-center gap-1 text-[10px] text-slate-500">
                               <span>✓ Todo o setup é testado e entregue homologado pronto para rodar.</span>
                             </div>
@@ -4249,14 +4277,14 @@ Como posso te ajudar hoje?`
                       <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 space-y-3">
                         <div className="flex justify-between items-center text-xs border-b border-slate-800 pb-2">
                           <span className="text-slate-300 font-bold flex items-center gap-1.5">
-                            <span className="text-amber-400 text-sm">🚧</span> Desembolso do Mês 1 (Implementação)
+                            <span className="text-amber-400 text-sm">🚧</span> Desembolso do Mês 1 (Entrada/Setup)
                           </span>
                           <strong className="text-amber-400 font-mono font-black text-base">
                             R$ {opReport.totalFirstMonth.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </strong>
                         </div>
                         <p className="text-[10px] text-slate-400 leading-relaxed">
-                          ⚠️ <strong>Regra Comercial Especial:</strong> No primeiro mês (período de implementação e homologação técnica dos fluxos), a mensalidade recorrente é <strong>totalmente isenta (R$ 0,00)</strong>. O cliente paga apenas o valor do Setup (ou a primeira parcela dele).
+                          ⚠️ <strong>Regra Comercial Especial:</strong> No primeiro mês (período de implementação e homologação técnica dos fluxos), a mensalidade recorrente é <strong>totalmente isenta (R$ 0,00)</strong>. O cliente paga apenas a entrada do Setup (ou o valor integral do Setup à vista).
                         </p>
 
                         {/* Cronograma de desembolso */}
@@ -4268,13 +4296,20 @@ Como posso te ajudar hoje?`
                             {/* Mês 1 */}
                             <div className="flex flex-col p-2.5 rounded bg-slate-950/60 border border-amber-500/20 gap-1.5">
                               <div className="flex items-center justify-between">
-                                <span className="text-amber-400 font-extrabold text-[12px]">Mês 1 (Apenas Implementação):</span>
-                                <span className="text-amber-300 font-extrabold text-[12px]">R$ {opReport.setupInstallmentValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                <span className="text-amber-400 font-extrabold text-[12px]">Mês 1 (Setup Inicial):</span>
+                                <span className="text-amber-300 font-extrabold text-[12px]">
+                                  R$ {opReport.totalFirstMonth.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
                               </div>
                               <div className="flex flex-col gap-1 text-[10px] text-slate-400 border-t border-slate-800/80 pt-1.5">
                                 <div className="flex justify-between">
-                                  <span>↳ Parcela Setup (1 de {opReport.setupInstallments}):</span>
-                                  <span className="font-bold text-slate-300">R$ {opReport.setupInstallmentValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                                  <span>
+                                    {opReport.setupInstallments > 1
+                                      ? `↳ Entrada do Setup (${opReport.setupDownPaymentPercent}%):`
+                                      : "↳ Setup à Vista / Integral (100%):"
+                                    }
+                                  </span>
+                                  <span className="font-bold text-slate-300">R$ {opReport.totalFirstMonth.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                 </div>
                                 <div className="flex justify-between">
                                   <span>↳ Assinatura Recorrente:</span>
@@ -4284,18 +4319,18 @@ Como posso te ajudar hoje?`
                             </div>
 
                             {/* Mês 2 em diante (se parcelado) */}
-                            {opReport.setupInstallments > 1 && (
+                            {opReport.setupInstallments > 1 && opReport.setupOneTime > 0 && (
                               <div className="flex flex-col p-2.5 rounded bg-slate-950/40 border border-slate-800/80 gap-1.5">
                                 <div className="flex items-center justify-between">
-                                  <span className="text-slate-200 font-extrabold text-[12px]">Meses 2 a {opReport.setupInstallments}:</span>
+                                  <span className="text-slate-200 font-extrabold text-[12px]">Meses 2 a {opReport.setupInstallments + 1}:</span>
                                   <div className="text-right">
                                     <span className="text-slate-100 font-extrabold text-[12px] block">R$ {(opReport.totalMonthlyWithMarkup + opReport.setupInstallmentValue).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
-                                    <span className="text-[9px] text-slate-500 font-normal">Soma dos contratos distintos</span>
+                                    <span className="text-[9px] text-slate-500 font-normal">Parcela + Assinatura</span>
                                   </div>
                                 </div>
                                 <div className="flex flex-col gap-1 text-[10px] text-slate-400 border-t border-slate-800/80 pt-1.5">
                                   <div className="flex justify-between">
-                                    <span>↳ Parcela Setup (Mensal):</span>
+                                    <span>↳ Parcela do Setup (saldo parcelado):</span>
                                     <span className="font-bold text-slate-300">R$ {opReport.setupInstallmentValue.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                                   </div>
                                   <div className="flex justify-between">
@@ -4309,7 +4344,9 @@ Como posso te ajudar hoje?`
                             {/* Mês pós-última parcela */}
                             <div className="flex flex-col p-2.5 rounded bg-slate-950/20 border border-slate-800/40 gap-1.5">
                               <div className="flex items-center justify-between">
-                                <span className="text-slate-400 font-extrabold text-[12px]">Mês {opReport.setupInstallments + 1} em diante:</span>
+                                <span className="text-slate-400 font-extrabold text-[12px]">
+                                  Mês {opReport.setupInstallments > 1 && opReport.setupOneTime > 0 ? opReport.setupInstallments + 2 : 2} em diante:
+                                </span>
                                 <span className="text-emerald-400 font-extrabold text-[12px]">R$ {opReport.totalMonthlyWithMarkup.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                               </div>
                               <div className="flex flex-col gap-1 text-[10px] text-slate-400 border-t border-slate-800/80 pt-1.5">

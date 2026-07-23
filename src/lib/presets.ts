@@ -72,15 +72,18 @@ export const REAL_RESGATA_PRESET: SDRPreset = {
 
 export const PLANNER_RESGATA_COMPLETO: OperationalParams = {
   items: [
-    { id: "vps", label: "VPS (hospeda n8n)", category: "infra", enabled: true, monthlyValue: 149.99 },
-    { id: "supabase", label: "Supabase (banco)", category: "infra", enabled: true, monthlyValue: 127.75 },
-    { id: "uazapi", label: "Uazapi (WhatsApp API)", category: "infra", enabled: true, monthlyValue: 38 },
-    { id: "redis", label: "Redis (cache n8n)", category: "infra", enabled: true, monthlyValue: 51.10 },
-    { id: "maintenance", label: "Manutenção mensal", category: "labor", enabled: true, monthlyValue: 800 },
-    { id: "flowbuild", label: "Montagem dos fluxos (one-time)", category: "setup", enabled: true, monthlyValue: 0, oneTimeValue: 3200 },
+    { id: "vps", label: "🖥️ VPS (hospeda n8n)", category: "infra", enabled: true, monthlyValue: 149.99 },
+    { id: "supabase", label: "🗄️ Supabase (banco)", category: "infra", enabled: true, monthlyValue: 127.75 },
+    { id: "uazapi", label: "💬 Uazapi (WhatsApp API)", category: "infra", enabled: true, monthlyValue: 38 },
+    { id: "redis", label: "⚡ Redis (cache n8n)", category: "infra", enabled: true, monthlyValue: 51.10 },
+    { id: "crm_monthly", label: "📊 CRM (Mensal)", category: "infra", enabled: true, monthlyValue: 150.00 },
+    { id: "maintenance", label: "🔧 Manutenção mensal", category: "labor", enabled: true, monthlyValue: 800 },
+    { id: "flowbuild", label: "🚧 Montagem dos fluxos (one-time)", category: "setup", enabled: true, monthlyValue: 0, oneTimeValue: 3200 },
+    { id: "crm_setup", label: "🏗️ Criação e Setup do CRM (one-time)", category: "setup", enabled: true, monthlyValue: 0, oneTimeValue: 1500 },
   ],
   clientMarkupEnabled: true,
   clientMarkup: 0.30,
-  setupInstallments: 1,
+  setupInstallments: 3,
+  setupDownPaymentPercent: 50,
 };
 

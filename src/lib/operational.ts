@@ -15,25 +15,29 @@ export interface OperationalParams {
   clientMarkupEnabled: boolean; // default true
   clientMarkup: number;         // default 0.30 (30%)
   setupInstallments: number;    // default 1 (1x a 12x)
+  setupDownPaymentPercent: number; // default 50 (50% de entrada)
 }
 
 export const DEFAULT_OPERATIONAL_ITEMS: OperationalItem[] = [
   // INFRA
-  { id: "vps", label: "VPS (hospeda n8n)", category: "infra", enabled: true, monthlyValue: 149.99 },
-  { id: "supabase", label: "Supabase (banco)", category: "infra", enabled: true, monthlyValue: 127.75 },
-  { id: "uazapi", label: "Uazapi (WhatsApp API)", category: "infra", enabled: true, monthlyValue: 38 },
-  { id: "redis", label: "Redis (cache n8n)", category: "infra", enabled: true, monthlyValue: 51.10 },
+  { id: "vps", label: "🖥️ VPS (hospeda n8n)", category: "infra", enabled: true, monthlyValue: 149.99 },
+  { id: "supabase", label: "🗄️ Supabase (banco)", category: "infra", enabled: true, monthlyValue: 127.75 },
+  { id: "uazapi", label: "💬 Uazapi (WhatsApp API)", category: "infra", enabled: true, monthlyValue: 38 },
+  { id: "redis", label: "⚡ Redis (cache n8n)", category: "infra", enabled: true, monthlyValue: 51.10 },
+  { id: "crm_monthly", label: "📊 CRM (Mensal)", category: "infra", enabled: true, monthlyValue: 150.00 },
   // MÃO DE OBRA MENSAL
-  { id: "maintenance", label: "Manutenção mensal", category: "labor", enabled: true, monthlyValue: 800 },
+  { id: "maintenance", label: "🔧 Manutenção mensal", category: "labor", enabled: true, monthlyValue: 800 },
   // SETUP ÚNICO (one-time)
-  { id: "flowbuild", label: "Montagem dos fluxos (one-time)", category: "setup", enabled: true, monthlyValue: 0, oneTimeValue: 3200 },
+  { id: "flowbuild", label: "🚧 Montagem dos fluxos (one-time)", category: "setup", enabled: true, monthlyValue: 0, oneTimeValue: 3200 },
+  { id: "crm_setup", label: "🏗️ Criação e Setup do CRM (one-time)", category: "setup", enabled: true, monthlyValue: 0, oneTimeValue: 1500 },
 ];
 
 export const DEFAULT_OPERATIONAL_PARAMS: OperationalParams = {
   items: DEFAULT_OPERATIONAL_ITEMS,
   clientMarkupEnabled: true,
   clientMarkup: 0.30,
-  setupInstallments: 1,
+  setupInstallments: 3,
+  setupDownPaymentPercent: 50,
 };
 
 export interface BreakdownItem {
@@ -55,8 +59,10 @@ export interface OperationalReport {
   clientMarkupAmount: number;
   totalMonthlyWithMarkup: number;
   setupInstallments: number;
+  setupDownPaymentPercent: number;
+  setupDownPaymentValue: number;
   setupInstallmentValue: number;
-  totalFirstMonth: number; // Apenas a parcela do setup (Mês 1 não tem recorrência)
+  totalFirstMonth: number; // Apenas a parcela do setup / entrada (Mês 1 não tem recorrência)
   breakdown: BreakdownItem[];
   pieData: { name: string; value: number; color: string }[];
 }
@@ -64,6 +70,7 @@ export interface OperationalReport {
 export function computeOperationalReport(aiMonthlyBrl: number, op: OperationalParams): OperationalReport {
   const items = op.items || DEFAULT_OPERATIONAL_ITEMS;
   const installments = Math.max(1, op.setupInstallments || 1);
+  const downPaymentPercent = op.setupDownPaymentPercent !== undefined ? op.setupDownPaymentPercent : 50;
 
   const infrastructureMonthly = items
     .filter((i) => i.enabled && i.category === "infra")
@@ -84,9 +91,13 @@ export function computeOperationalReport(aiMonthlyBrl: number, op: OperationalPa
   const clientMarkupAmount = totalMonthlyBase * markupRate;
   const totalMonthlyWithMarkup = totalMonthlyBase + clientMarkupAmount;
 
-  // No primeiro mês, o cliente NÃO paga mensalidade recorrente, apenas a parcela da implementação
-  const setupInstallmentValue = setupOneTime / installments;
-  const totalFirstMonth = setupInstallmentValue;
+  // No primeiro mês, o cliente NÃO paga mensalidade recorrente.
+  // Se parcelado (installments > 1), paga a Entrada (setupDownPaymentValue).
+  // Se à vista (installments === 1), paga o valor integral do Setup (setupOneTime).
+  const setupDownPaymentValue = setupOneTime * (downPaymentPercent / 100);
+  const remainingSetupAmount = setupOneTime - setupDownPaymentValue;
+  const setupInstallmentValue = installments > 1 ? remainingSetupAmount / installments : 0;
+  const totalFirstMonth = installments > 1 ? setupDownPaymentValue : setupOneTime;
 
   const totalForPercent = totalMonthlyWithMarkup > 0 ? totalMonthlyWithMarkup : 1;
 
@@ -153,6 +164,8 @@ export function computeOperationalReport(aiMonthlyBrl: number, op: OperationalPa
     clientMarkupAmount,
     totalMonthlyWithMarkup,
     setupInstallments: installments,
+    setupDownPaymentPercent: downPaymentPercent,
+    setupDownPaymentValue,
     setupInstallmentValue,
     totalFirstMonth,
     breakdown,
