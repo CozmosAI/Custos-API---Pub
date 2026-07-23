@@ -81,5 +81,6 @@ export const PLANNER_RESGATA_COMPLETO: OperationalParams = {
   ],
   clientMarkupEnabled: true,
   clientMarkup: 0.30,
+  setupInstallments: 1,
 };
 

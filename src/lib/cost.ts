@@ -37,6 +37,7 @@ export interface FlowParams {
   followHistoryChars: number;
   followOutputChars: number;
   repeatedMessageRate: number;
+  followupRetention?: number; // % of leads that remain until the end of follow-up (others reply and drop out early)
   
   // Câmbio & Contingência
   usdToBrl: number;
@@ -191,8 +192,9 @@ export function calculateSdrAndFollow(params: FlowParams): FlowResult {
   const followMessageCostUsdBase = followAgentCallUsd + followAlternativoWeightedUsd + followFracionaCallUsd;
   const followMessageCostBrlBase = followMessageCostUsdBase * effectiveUsdBrl;
 
-  // Custo por Lead Follow (IA apenas nos dias configurados em followIaDays)
-  const followIaMsgsPerLead = (params.followRate || 0) * (params.followIaDays || 1) * (params.followMessagesPerDay || 1);
+  // Custo por Lead Follow (IA apenas nos dias configurados em followIaDays com fator de retenção se configurado)
+  const retentionFactor = params.followupRetention !== undefined ? (1 + params.followupRetention / 100) / 2 : 1;
+  const followIaMsgsPerLead = (params.followRate || 0) * (params.followIaDays || 1) * (params.followMessagesPerDay || 1) * retentionFactor;
   const followLeadCostUsdBase = followIaMsgsPerLead * followMessageCostUsdBase;
   const followLeadCostBrlBase = followLeadCostUsdBase * effectiveUsdBrl;
 

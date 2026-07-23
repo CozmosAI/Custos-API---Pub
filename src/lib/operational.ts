@@ -14,6 +14,7 @@ export interface OperationalParams {
   items: OperationalItem[];
   clientMarkupEnabled: boolean; // default true
   clientMarkup: number;         // default 0.30 (30%)
+  setupInstallments: number;    // default 1 (1x a 12x)
 }
 
 export const DEFAULT_OPERATIONAL_ITEMS: OperationalItem[] = [
@@ -32,6 +33,7 @@ export const DEFAULT_OPERATIONAL_PARAMS: OperationalParams = {
   items: DEFAULT_OPERATIONAL_ITEMS,
   clientMarkupEnabled: true,
   clientMarkup: 0.30,
+  setupInstallments: 1,
 };
 
 export interface BreakdownItem {
@@ -52,13 +54,16 @@ export interface OperationalReport {
   totalMonthlyBase: number;
   clientMarkupAmount: number;
   totalMonthlyWithMarkup: number;
-  totalFirstMonth: number;
+  setupInstallments: number;
+  setupInstallmentValue: number;
+  totalFirstMonth: number; // Apenas a parcela do setup (Mês 1 não tem recorrência)
   breakdown: BreakdownItem[];
   pieData: { name: string; value: number; color: string }[];
 }
 
 export function computeOperationalReport(aiMonthlyBrl: number, op: OperationalParams): OperationalReport {
   const items = op.items || DEFAULT_OPERATIONAL_ITEMS;
+  const installments = Math.max(1, op.setupInstallments || 1);
 
   const infrastructureMonthly = items
     .filter((i) => i.enabled && i.category === "infra")
@@ -78,7 +83,10 @@ export function computeOperationalReport(aiMonthlyBrl: number, op: OperationalPa
   const markupRate = op.clientMarkupEnabled ? (op.clientMarkup || 0) : 0;
   const clientMarkupAmount = totalMonthlyBase * markupRate;
   const totalMonthlyWithMarkup = totalMonthlyBase + clientMarkupAmount;
-  const totalFirstMonth = totalMonthlyWithMarkup + setupOneTime;
+
+  // No primeiro mês, o cliente NÃO paga mensalidade recorrente, apenas a parcela da implementação
+  const setupInstallmentValue = setupOneTime / installments;
+  const totalFirstMonth = setupInstallmentValue;
 
   const totalForPercent = totalMonthlyWithMarkup > 0 ? totalMonthlyWithMarkup : 1;
 
@@ -144,6 +152,8 @@ export function computeOperationalReport(aiMonthlyBrl: number, op: OperationalPa
     totalMonthlyBase,
     clientMarkupAmount,
     totalMonthlyWithMarkup,
+    setupInstallments: installments,
+    setupInstallmentValue,
     totalFirstMonth,
     breakdown,
     pieData: filteredPieData,
