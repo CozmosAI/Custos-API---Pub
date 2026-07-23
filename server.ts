@@ -113,7 +113,7 @@ Por favor, elabore um relatório consultivo conciso dividido em 3 seções curta
 // API endpoint for general AI Chat Consultation & Auto-Calculation
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages, currentState, file } = req.body;
+    const { messages, currentState, file, files } = req.body;
 
     if (!Array.isArray(messages)) {
       res.status(400).json({ error: "O parâmetro 'messages' deve ser um array." });
@@ -121,6 +121,14 @@ app.post("/api/chat", async (req, res) => {
     }
 
     const ai = getGeminiClient();
+
+    // Normaliza arquivos recebidos
+    const attachedFiles: Array<{ name?: string; data: string; mimeType: string }> = [];
+    if (Array.isArray(files) && files.length > 0) {
+      attachedFiles.push(...files);
+    } else if (file && file.data && file.mimeType) {
+      attachedFiles.push(file);
+    }
 
     const systemPrompt = `Você é o Consultor Virtual Especialista em Custos de Inteligência Artificial para Negócios e Vendas.
 
@@ -164,14 +172,18 @@ Responda sempre em português brasileiro de forma amigável, clara e focada em r
       const role = m.role === "assistant" ? "model" : m.role;
       const parts: any[] = [{ text: m.content || "" }];
       
-      // Se for a última mensagem do usuário e houver um arquivo, anexa
-      if (index === messages.length - 1 && role === "user" && file) {
-        parts.push({
-          inlineData: {
-            mimeType: file.mimeType,
-            data: file.data
+      // Se for a última mensagem do usuário e houver arquivos, anexa todos eles
+      if (index === messages.length - 1 && role === "user" && attachedFiles.length > 0) {
+        for (const f of attachedFiles) {
+          if (f?.data && f?.mimeType) {
+            parts.push({
+              inlineData: {
+                mimeType: f.mimeType,
+                data: f.data
+              }
+            });
           }
-        });
+        }
       }
 
       return {

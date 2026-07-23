@@ -311,25 +311,41 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
   ]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
-  const [chatFile, setChatFile] = useState<{ name: string; data: string; mimeType: string } | null>(null);
+  const [chatFiles, setChatFiles] = useState<Array<{ name: string; data: string; mimeType: string }>>([]);
   const chatFileInputRef = React.useRef<HTMLInputElement>(null);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
 
   const handleChatFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const selectedFiles = e.target.files;
+    if (!selectedFiles || selectedFiles.length === 0) return;
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      const base64 = result.split(',')[1];
-      setChatFile({
-        name: file.name,
-        data: base64,
-        mimeType: file.type
+    const filePromises = Array.from(selectedFiles).map((file) => {
+      return new Promise<{ name: string; data: string; mimeType: string }>((resolve) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const result = event.target?.result as string;
+          const base64 = result.split(',')[1];
+          resolve({
+            name: file.name,
+            data: base64,
+            mimeType: file.type || 'application/octet-stream'
+          });
+        };
+        reader.readAsDataURL(file);
       });
-    };
-    reader.readAsDataURL(file);
+    });
+
+    Promise.all(filePromises).then((newFiles) => {
+      setChatFiles(prev => [...prev, ...newFiles]);
+    });
+
+    if (e.target) {
+      e.target.value = '';
+    }
+  };
+
+  const handleRemoveChatFile = (indexToRemove: number) => {
+    setChatFiles(prev => prev.filter((_, idx) => idx !== indexToRemove));
   };
 
   // Auto scroll no chat
@@ -339,15 +355,23 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
 
   const handleSendChatMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if ((!chatInput.trim() && !chatFile) || isChatLoading) return;
+    if ((!chatInput.trim() && chatFiles.length === 0) || isChatLoading) return;
 
     const userText = chatInput;
-    const currentFile = chatFile;
+    const currentFiles = [...chatFiles];
     setChatInput("");
-    setChatFile(null);
+    setChatFiles([]);
+
+    let fileAttachmentNote = "";
+    if (currentFiles.length === 1) {
+      fileAttachmentNote = `\n\n📎 *Arquivo anexado: ${currentFiles[0].name}*`;
+    } else if (currentFiles.length > 1) {
+      fileAttachmentNote = `\n\n📎 *${currentFiles.length} arquivos anexados:*\n` + currentFiles.map(f => `- ${f.name}`).join("\n");
+    }
+
     setChatMessages(prev => [...prev, { 
       role: "user", 
-      content: userText + (currentFile ? `\n\n📎 *Arquivo anexado: ${currentFile.name}*` : "") 
+      content: userText + fileAttachmentNote 
     }]);
     setIsChatLoading(true);
 
@@ -378,7 +402,7 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
         body: JSON.stringify({
           messages: [...chatMessages, { role: "user", content: userText }],
           currentState,
-          file: currentFile
+          files: currentFiles
         })
       });
 
@@ -3657,19 +3681,31 @@ Como posso te ajudar hoje?`
 
               {/* Form de Input de Mensagem */}
               <div className="pt-3 space-y-2">
-                {chatFile && (
-                  <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? "bg-slate-900/50 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <FileText className="h-4 w-4 text-emerald-500 shrink-0" />
-                      <span className="text-[10px] font-bold text-slate-300 truncate">{chatFile.name}</span>
-                    </div>
-                    <button 
-                      type="button"
-                      onClick={() => setChatFile(null)}
-                      className="p-1 hover:bg-slate-800 rounded-full text-slate-500 hover:text-red-400 transition-colors"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
+                {chatFiles.length > 0 && (
+                  <div className="flex flex-col gap-1.5 max-h-36 overflow-y-auto pr-1">
+                    {chatFiles.map((fileItem, idx) => (
+                      <div 
+                        key={`${fileItem.name}-${idx}`}
+                        className={`flex items-center justify-between p-2 rounded-lg border text-xs ${
+                          darkMode ? "bg-slate-900/60 border-slate-800 text-slate-300" : "bg-slate-50 border-slate-200 text-slate-700"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 overflow-hidden pr-2">
+                          <FileText className="h-4 w-4 text-emerald-500 shrink-0" />
+                          <span className="text-[10px] font-bold truncate">{fileItem.name}</span>
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={() => handleRemoveChatFile(idx)}
+                          className={`p-1 rounded-full transition-colors ${
+                            darkMode ? "hover:bg-slate-800 text-slate-500 hover:text-red-400" : "hover:bg-slate-200 text-slate-400 hover:text-red-500"
+                          }`}
+                          title="Remover arquivo"
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 )}
                 
@@ -3679,18 +3715,24 @@ Como posso te ajudar hoje?`
                     ref={chatFileInputRef}
                     onChange={handleChatFileChange}
                     className="hidden"
+                    multiple
                     accept="image/*,.pdf,.txt,.json,.csv"
                   />
                   <button
                     type="button"
                     onClick={() => chatFileInputRef.current?.click()}
                     disabled={isChatLoading}
-                    className={`px-3 h-10 rounded-xl border flex items-center justify-center transition-all disabled:opacity-50 ${
+                    className={`px-3 h-10 rounded-xl border flex items-center justify-center transition-all disabled:opacity-50 relative ${
                       darkMode ? "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700" : "bg-white border-slate-200 text-slate-500 hover:text-slate-900"
                     }`}
-                    title="Anexar arquivo"
+                    title="Anexar arquivos (suporta múltiplos)"
                   >
                     <PlusCircle className="h-5 w-5" />
+                    {chatFiles.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-emerald-500 text-black font-extrabold text-[9px] w-4 h-4 rounded-full flex items-center justify-center">
+                        {chatFiles.length}
+                      </span>
+                    )}
                   </button>
                   <input
                     id="chat-input-field"
@@ -3704,7 +3746,7 @@ Como posso te ajudar hoje?`
                   <button
                     id="chat-submit-btn"
                     type="submit"
-                    disabled={isChatLoading || (!chatInput.trim() && !chatFile)}
+                    disabled={isChatLoading || (!chatInput.trim() && chatFiles.length === 0)}
                     className="px-4 h-10 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all cursor-pointer shrink-0"
                   >
                     <span>Enviar</span>
