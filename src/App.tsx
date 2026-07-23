@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from "react";
 import { calculateSdrAndFollow, FlowParams } from "./lib/cost";
-import { REAL_RESGATA_PRESET } from "./lib/presets";
+import { REAL_RESGATA_PRESET, PLANNER_RESGATA_COMPLETO } from "./lib/presets";
+import { OperationalParams, computeOperationalReport } from "./lib/operational";
 import { 
   ResponsiveContainer, 
   AreaChart, 
@@ -9,7 +10,11 @@ import {
   YAxis, 
   CartesianGrid, 
   Tooltip, 
-  ReferenceLine 
+  ReferenceLine,
+  PieChart as RechartsPieChart,
+  Pie,
+  Cell,
+  Legend as RechartsLegend
 } from "recharts";
 import { 
   Calculator, 
@@ -42,7 +47,11 @@ import {
   PlusCircle,
   Repeat,
   Sliders,
-  PieChart
+  PieChart,
+  Briefcase,
+  Server,
+  Wrench,
+  DollarSign
 } from "lucide-react";
 import Markdown from "react-markdown";
 
@@ -289,7 +298,8 @@ export default function App() {
   };
 
   // Inputs e Defaults da Simulação
-  const [activeMainTab, setActiveMainTab] = useState<"simulator" | "import" | "presets" | "details" | "faq" | "chat">("simulator");
+  const [activeMainTab, setActiveMainTab] = useState<"simulator" | "import" | "presets" | "details" | "faq" | "chat" | "planner">("simulator");
+  const [operationalParams, setOperationalParams] = useState<OperationalParams>(PLANNER_RESGATA_COMPLETO);
   const [selectedModelId, setSelectedModelId] = useState("gemini-3-5-flash-lite");
   const [selectedTier, setSelectedTier] = useState<"standard" | "batch" | "flex" | "priority">("standard");
   const [leads, setLeads] = useState<number>(16);
@@ -831,6 +841,12 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
     budget
   ]);
 
+  // Relatório de Custos Operacionais Totais (TCO)
+  const opReport = useMemo(() => {
+    const aiMonthlyBrl = calcResults.rawFlowResult.totalMonthlyCostBrlWithMargin;
+    return computeOperationalReport(aiMonthlyBrl, operationalParams);
+  }, [calcResults.rawFlowResult, operationalParams]);
+
   // --- ALTERAR MOEDA (com conversão dinâmica de input de orçamento) ---
   const handleCurrencyToggle = () => {
     setIsUSD(prev => {
@@ -1018,6 +1034,19 @@ Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabela
             >
               <Calculator className="h-3.5 w-3.5" />
               <span>Simulador</span>
+            </button>
+
+            <button
+              id="main-tab-planner"
+              onClick={() => setActiveMainTab("planner")}
+              className={`px-3.5 py-1.5 rounded-lg font-bold text-xs flex items-center gap-1.5 transition-all cursor-pointer ${
+                activeMainTab === "planner"
+                  ? "bg-emerald-500 text-black shadow-sm"
+                  : "text-slate-400 hover:text-slate-200"
+              }`}
+            >
+              <Briefcase className="h-3.5 w-3.5" />
+              <span>Planner Operacional</span>
             </button>
 
             <button
@@ -3730,6 +3759,480 @@ Como posso te ajudar hoje?`
                     <ArrowRight className="h-4 w-4 stroke-[2.5]" />
                   </button>
                 </form>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════ SEÇÃO: PLANNER OPERACIONAL (TCO TOTAL) ═══════ */}
+        {activeMainTab === "planner" && (
+          <div className="space-y-6">
+            <div className={`p-6 rounded-xl border ${themeClasses.card} space-y-4 shadow-lg`}>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4 border-slate-800/60">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                    <Briefcase className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-base text-slate-100 flex items-center gap-2">
+                      Planner Operacional & TCO Total
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                        Visão de Negócio
+                      </span>
+                    </h3>
+                    <p className="text-xs text-slate-400">
+                      Soma os custos de IA com infraestrutura, WhatsApp API, manutenção e setup. Alterne o controle individual de cada item.
+                    </p>
+                  </div>
+                </div>
+
+                <button
+                  id="reset-planner-preset-btn"
+                  onClick={() => setOperationalParams(PLANNER_RESGATA_COMPLETO)}
+                  className="px-3.5 py-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 font-bold text-xs flex items-center gap-2 transition-all cursor-pointer shrink-0"
+                  title="Restaurar padrão do Planner Resgata Completo"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                  <span>Carregar Preset: Resgata Completo</span>
+                </button>
+              </div>
+
+              {/* Grid 2 Colunas */}
+              <div className="grid lg:grid-cols-12 gap-6 pt-2">
+                
+                {/* COLUNA ESQUERDA: INPUTS OPERACIONAIS & TOGGLES */}
+                <div className="lg:col-span-6 space-y-5">
+                  
+                  {/* SEÇÃO 1: TOKEN (IA) — DESTAQUE VERDE */}
+                  <div className="p-4 rounded-xl bg-emerald-950/40 border-2 border-emerald-500/40 space-y-3 shadow-md">
+                    <div className="flex items-center justify-between border-b border-emerald-500/30 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Bot className="h-5 w-5 text-emerald-400" />
+                        <h4 className="text-xs font-extrabold text-emerald-300 uppercase tracking-wider">
+                          💬 TOKEN (IA) — Base Inegociável
+                        </h4>
+                      </div>
+                      <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/20 px-2 py-0.5 rounded border border-emerald-500/30">
+                        Sem Toggle (Engine IA)
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900/90 border border-emerald-500/30">
+                      <div>
+                        <span className="text-xs font-bold text-slate-100 block">
+                          IA — SDR + Follow-up (com margem)
+                        </span>
+                        <span className="text-[11px] text-slate-400 block mt-0.5">
+                          Calculado via engine oficial ({selectedModel.name})
+                        </span>
+                        <span className="text-[10px] text-emerald-400 font-mono block mt-1">
+                          base R$ {Math.round(calcResults.rawFlowResult.totalMonthlyCostBrlBase).toLocaleString("pt-BR")} + {Math.round((calcResults.rawFlowResult.safetyMarginMultiplier - 1) * 100)}% = R$ {Math.round(calcResults.rawFlowResult.totalMonthlyCostBrlWithMargin - calcResults.rawFlowResult.totalMonthlyCostBrlBase).toLocaleString("pt-BR")}
+                        </span>
+                      </div>
+                      <div className="text-right">
+                        <strong className="text-base font-mono font-black text-emerald-400 block">
+                          R$ {opReport.aiMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className="text-[10px] text-slate-400 font-normal"> /mês</span>
+                        </strong>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* SEÇÃO 2: CUSTOS OPERACIONAIS — INFRAESTRUTURA */}
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Server className="h-4 w-4 text-blue-400" />
+                        <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                          🖥️ Custos Operacionais — Infraestrutura
+                        </h4>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-blue-400">
+                        R$ {opReport.infrastructureMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      {operationalParams.items.filter(i => i.category === "infra").map((item) => {
+                        const isUazapi = item.id === "uazapi";
+                        return (
+                          <div
+                            key={item.id}
+                            className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
+                              item.enabled
+                                ? "bg-slate-900 border-slate-700/80"
+                                : "bg-slate-950/50 border-slate-800/40 opacity-60"
+                            }`}
+                          >
+                            <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-2">
+                              <input
+                                type="checkbox"
+                                id={`toggle-item-${item.id}`}
+                                checked={item.enabled}
+                                onChange={(e) => {
+                                  const checked = e.target.checked;
+                                  setOperationalParams(prev => ({
+                                    ...prev,
+                                    items: prev.items.map(it => it.id === item.id ? { ...it, enabled: checked } : it)
+                                  }));
+                                }}
+                                className="rounded border-slate-700 accent-blue-500 cursor-pointer h-4 w-4 shrink-0"
+                              />
+                              <label htmlFor={`toggle-item-${item.id}`} className="font-medium text-slate-200 cursor-pointer truncate flex items-center gap-1.5">
+                                {isUazapi ? "💬 Uazapi (WhatsApp API)" : item.label}
+                                {isUazapi && (
+                                  <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                                    API WhatsApp
+                                  </span>
+                                )}
+                              </label>
+                            </div>
+
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-slate-400 text-xs">R$</span>
+                              <input
+                                type="number"
+                                id={`input-item-val-${item.id}`}
+                                disabled={!item.enabled}
+                                value={item.monthlyValue}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setOperationalParams(prev => ({
+                                    ...prev,
+                                    items: prev.items.map(it => it.id === item.id ? { ...it, monthlyValue: val } : it)
+                                  }));
+                                }}
+                                className={`w-24 h-8 px-2.5 rounded border font-mono text-xs text-right ${
+                                  item.enabled ? themeClasses.input : "bg-slate-950 text-slate-500 border-slate-800"
+                                }`}
+                              />
+                              <span className="text-[10px] text-slate-500 font-mono">/mês</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* SEÇÃO 3: MÃO DE OBRA & SETUP */}
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                      <div className="flex items-center gap-2">
+                        <Wrench className="h-4 w-4 text-purple-400" />
+                        <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                          🔧 Mão de Obra & Setup
+                        </h4>
+                      </div>
+                      <span className="text-xs font-mono font-bold text-purple-400">
+                        Manutenção: R$ {opReport.laborMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2 })}/mês
+                      </span>
+                    </div>
+
+                    <div className="space-y-2.5 text-xs">
+                      {/* Item Manutenção Mensal */}
+                      {operationalParams.items.filter(i => i.category === "labor").map((item) => (
+                        <div
+                          key={item.id}
+                          className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
+                            item.enabled
+                              ? "bg-slate-900 border-slate-700/80"
+                              : "bg-slate-950/50 border-slate-800/40 opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-2">
+                            <input
+                              type="checkbox"
+                              id={`toggle-item-${item.id}`}
+                              checked={item.enabled}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setOperationalParams(prev => ({
+                                  ...prev,
+                                  items: prev.items.map(it => it.id === item.id ? { ...it, enabled: checked } : it)
+                                }));
+                              }}
+                              className="rounded border-slate-700 accent-purple-500 cursor-pointer h-4 w-4 shrink-0"
+                            />
+                            <label htmlFor={`toggle-item-${item.id}`} className="font-medium text-slate-200 cursor-pointer truncate">
+                              🔧 Manutenção e Suporte Mensal
+                            </label>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-slate-400 text-xs">R$</span>
+                            <input
+                              type="number"
+                              id={`input-item-val-${item.id}`}
+                              disabled={!item.enabled}
+                              value={item.monthlyValue}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setOperationalParams(prev => ({
+                                  ...prev,
+                                  items: prev.items.map(it => it.id === item.id ? { ...it, monthlyValue: val } : it)
+                                }));
+                              }}
+                              className={`w-24 h-8 px-2.5 rounded border font-mono text-xs text-right ${
+                                item.enabled ? themeClasses.input : "bg-slate-950 text-slate-500 border-slate-800"
+                              }`}
+                            />
+                            <span className="text-[10px] text-slate-500 font-mono">/mês</span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {/* Item Setup Único (One-time) */}
+                      {operationalParams.items.filter(i => i.category === "setup").map((item) => (
+                        <div
+                          key={item.id}
+                          className={`flex items-center justify-between p-2.5 rounded-lg border transition-all ${
+                            item.enabled
+                              ? "bg-slate-900 border-slate-700/80"
+                              : "bg-slate-950/50 border-slate-800/40 opacity-60"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2.5 flex-1 min-w-0 pr-2">
+                            <input
+                              type="checkbox"
+                              id={`toggle-item-${item.id}`}
+                              checked={item.enabled}
+                              onChange={(e) => {
+                                const checked = e.target.checked;
+                                setOperationalParams(prev => ({
+                                  ...prev,
+                                  items: prev.items.map(it => it.id === item.id ? { ...it, enabled: checked } : it)
+                                }));
+                              }}
+                              className="rounded border-slate-700 accent-slate-400 cursor-pointer h-4 w-4 shrink-0"
+                            />
+                            <div>
+                              <label htmlFor={`toggle-item-${item.id}`} className="font-medium text-slate-200 cursor-pointer truncate block">
+                                🚧 Montagem dos Fluxos (One-Time)
+                              </label>
+                              <span className="text-[10px] text-slate-400 block">Pago 1x no primeiro mês</span>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-slate-400 text-xs">R$</span>
+                            <input
+                              type="number"
+                              id={`input-item-val-${item.id}`}
+                              disabled={!item.enabled}
+                              value={item.oneTimeValue || 0}
+                              onChange={(e) => {
+                                const val = parseFloat(e.target.value) || 0;
+                                setOperationalParams(prev => ({
+                                  ...prev,
+                                  items: prev.items.map(it => it.id === item.id ? { ...it, oneTimeValue: val } : it)
+                                }));
+                              }}
+                              className={`w-24 h-8 px-2.5 rounded border font-mono text-xs text-right ${
+                                item.enabled ? themeClasses.input : "bg-slate-950 text-slate-500 border-slate-800"
+                              }`}
+                            />
+                            <span className="text-[10px] text-amber-400 font-mono font-bold">(único)</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* SEÇÃO 4: REPASSE AO CLIENTE (MARKUP) */}
+                  <div className="p-4 rounded-xl bg-slate-900/60 border border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between border-b border-slate-800/80 pb-2">
+                      <div className="flex items-center gap-2">
+                        <DollarSign className="h-4 w-4 text-amber-400" />
+                        <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">
+                          💰 Repasse & Margem Comercial (Markup)
+                        </h4>
+                      </div>
+
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          id="toggle-client-markup"
+                          type="checkbox"
+                          checked={operationalParams.clientMarkupEnabled}
+                          onChange={(e) => setOperationalParams({ ...operationalParams, clientMarkupEnabled: e.target.checked })}
+                          className="rounded border-slate-700 accent-amber-500 cursor-pointer h-4 w-4"
+                        />
+                        <span className="text-xs text-slate-300 font-semibold">Ativar Markup</span>
+                      </label>
+                    </div>
+
+                    {operationalParams.clientMarkupEnabled && (
+                      <div className="space-y-2 pt-1 text-xs">
+                        <div className="flex justify-between text-slate-300 font-semibold">
+                          <span>Margem sobre custo total base:</span>
+                          <span className="text-amber-400 font-mono font-bold">
+                            +{Math.round(operationalParams.clientMarkup * 100)}%
+                          </span>
+                        </div>
+                        <input
+                          id="input-client-markup-slider"
+                          type="range"
+                          min="0"
+                          max="1.0"
+                          step="0.05"
+                          value={operationalParams.clientMarkup}
+                          onChange={(e) => setOperationalParams({ ...operationalParams, clientMarkup: parseFloat(e.target.value) })}
+                          className="w-full accent-amber-500 cursor-pointer"
+                        />
+                        <p className="text-[10px] text-slate-400">
+                          Aplica +{Math.round(operationalParams.clientMarkup * 100)}% sobre a soma de IA + Infra + Manutenção ativos.
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+
+                {/* COLUNA DIREITA: RESULTADOS TCO MENSAL */}
+                <div className="lg:col-span-6 space-y-5">
+                  
+                  <div className="p-5 rounded-xl bg-slate-950 border border-emerald-500/30 space-y-4 shadow-xl">
+                    <div className="flex items-center justify-between border-b pb-3 border-slate-800">
+                      <div className="flex items-center gap-2">
+                        <Wallet className="h-5 w-5 text-emerald-400" />
+                        <h4 className="font-extrabold text-sm uppercase text-slate-100 tracking-wider">
+                          Resumo de Custos — TCO
+                        </h4>
+                      </div>
+                      <span className="text-[10px] font-mono uppercase bg-emerald-500/10 text-emerald-400 px-2 py-0.5 rounded border border-emerald-500/20 font-bold">
+                        Calculado
+                      </span>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                      {/* Linha TOKEN (IA) — Sempre Verde */}
+                      <div className="flex items-center justify-between p-2.5 rounded-lg bg-emerald-950/30 border border-emerald-500/30">
+                        <span className="text-emerald-300 font-bold flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 inline-block"></span>
+                          💬 TOKEN (IA)
+                        </span>
+                        <span className="font-mono text-emerald-400 font-extrabold">
+                          R$ {opReport.aiMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {/* Linha Infra */}
+                      <div className={`flex items-center justify-between p-2.5 rounded-lg border ${
+                        opReport.infrastructureMonthly > 0 ? "bg-slate-900 border-slate-800" : "bg-slate-950/40 border-slate-900 opacity-50"
+                      }`}>
+                        <span className={`font-medium flex items-center gap-1.5 ${opReport.infrastructureMonthly > 0 ? "text-slate-300" : "text-slate-500"}`}>
+                          <span className={`w-2.5 h-2.5 rounded-full inline-block ${opReport.infrastructureMonthly > 0 ? "bg-blue-500" : "bg-slate-600"}`}></span>
+                          🖥️ Infraestrutura
+                        </span>
+                        <span className={`font-mono font-bold ${opReport.infrastructureMonthly > 0 ? "text-blue-400" : "text-slate-500"}`}>
+                          R$ {opReport.infrastructureMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {/* Linha Manutenção */}
+                      <div className={`flex items-center justify-between p-2.5 rounded-lg border ${
+                        opReport.laborMonthly > 0 ? "bg-slate-900 border-slate-800" : "bg-slate-950/40 border-slate-900 opacity-50"
+                      }`}>
+                        <span className={`font-medium flex items-center gap-1.5 ${opReport.laborMonthly > 0 ? "text-slate-300" : "text-slate-500"}`}>
+                          <span className={`w-2.5 h-2.5 rounded-full inline-block ${opReport.laborMonthly > 0 ? "bg-purple-500" : "bg-slate-600"}`}></span>
+                          🔧 Manutenção e Suporte
+                        </span>
+                        <span className={`font-mono font-bold ${opReport.laborMonthly > 0 ? "text-purple-400" : "text-slate-500"}`}>
+                          R$ {opReport.laborMonthly.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="border-t border-slate-800 pt-2"></div>
+
+                      {/* Total Base Mensal */}
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-slate-900 border border-slate-700/80">
+                        <span className="text-slate-200 font-bold text-xs uppercase">
+                          = Total Base Mensal
+                        </span>
+                        <span className="font-mono text-white font-extrabold text-sm">
+                          R$ {opReport.totalMonthlyBase.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      {/* Markup */}
+                      {operationalParams.clientMarkupEnabled && (
+                        <div className="flex items-center justify-between p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20">
+                          <span className="text-amber-300 font-medium flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-full bg-amber-500 inline-block"></span>
+                            ➕ Repasse / Markup ({Math.round(operationalParams.clientMarkup * 100)}%)
+                          </span>
+                          <span className="font-mono text-amber-400 font-bold">
+                            R$ {opReport.clientMarkupAmount.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </span>
+                        </div>
+                      )}
+
+                      {/* Card Destaque: Mensal para o cliente */}
+                      <div className="p-4 rounded-xl bg-gradient-to-r from-emerald-950/90 to-slate-900 border-2 border-emerald-500/50 space-y-1 text-center shadow-lg">
+                        <span className="text-[10px] text-emerald-400 font-extrabold uppercase tracking-widest block">
+                          TOTAL MENSAL PARA O CLIENTE
+                        </span>
+                        <strong className="text-2xl font-black text-emerald-300 font-mono block">
+                          R$ {opReport.totalMonthlyWithMarkup.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          <span className="text-xs text-slate-400 font-normal"> / mês</span>
+                        </strong>
+                      </div>
+
+                      {/* Card Separado: Primeiro Mês */}
+                      <div className="p-3.5 rounded-xl bg-slate-900 border border-slate-800 space-y-1.5">
+                        <div className="flex justify-between items-center text-xs">
+                          <span className="text-slate-300 font-semibold flex items-center gap-1.5">
+                            <span className="text-amber-400">🚧</span> Primeiro Mês (com Setup de R$ {opReport.setupOneTime.toLocaleString("pt-BR")})
+                          </span>
+                          <strong className="text-amber-400 font-mono font-bold text-sm">
+                            R$ {opReport.totalFirstMonth.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          </strong>
+                        </div>
+                      </div>
+
+                    </div>
+
+                    {/* Gráfico de Pizza (Recharts PieChart) */}
+                    <div className="pt-2 border-t border-slate-800">
+                      <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2 text-center">
+                        Composição do Custo Mensal
+                      </h5>
+                      <div className="h-56 w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <RechartsPieChart>
+                            <Pie
+                              data={opReport.pieData}
+                              dataKey="value"
+                              nameKey="name"
+                              cx="50%"
+                              cy="50%"
+                              outerRadius={65}
+                              innerRadius={32}
+                              paddingAngle={4}
+                            >
+                              {opReport.pieData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip
+                              formatter={(val: number) => [`R$ ${Number(val).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "Valor"]}
+                              contentStyle={{ backgroundColor: "#020617", borderColor: "#334155", borderRadius: "0.5rem", fontSize: "11px", color: "#f8fafc" }}
+                            />
+                            <RechartsLegend
+                              formatter={(value, entry: any) => (
+                                <span className="text-[11px] text-slate-300 font-medium">
+                                  {value}: R$ {Number(entry.payload.value).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                                </span>
+                              )}
+                            />
+                          </RechartsPieChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+
+                  </div>
+
+                </div>
+
               </div>
             </div>
           </div>

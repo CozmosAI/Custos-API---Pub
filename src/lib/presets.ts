@@ -1,3 +1,5 @@
+import { OperationalParams } from "./operational";
+
 export interface SDRPreset {
   id: string;
   name: string;
@@ -67,3 +69,18 @@ export const REAL_RESGATA_PRESET: SDRPreset = {
   safetyMarginEnabled: true,
   safetyMargin: 0.30,
 };
+
+export const PLANNER_RESGATA_COMPLETO: OperationalParams = {
+  items: [
+    { id: "vps", label: "VPS (hospeda n8n)", category: "infra", enabled: true, monthlyValue: 150 },
+    { id: "supabase", label: "Supabase (banco)", category: "infra", enabled: true, monthlyValue: 0 },
+    { id: "uazapi", label: "Uazapi (WhatsApp API)", category: "infra", enabled: true, monthlyValue: 80 },
+    { id: "redis", label: "Redis (cache n8n)", category: "infra", enabled: true, monthlyValue: 0 },
+    { id: "domain", label: "Domínio + SSL", category: "infra", enabled: true, monthlyValue: 5 },
+    { id: "maintenance", label: "Manutenção mensal", category: "labor", enabled: true, monthlyValue: 800 },
+    { id: "flowbuild", label: "Montagem dos fluxos (one-time)", category: "setup", enabled: true, monthlyValue: 0, oneTimeValue: 3200 },
+  ],
+  clientMarkupEnabled: true,
+  clientMarkup: 0.30,
+};
+
