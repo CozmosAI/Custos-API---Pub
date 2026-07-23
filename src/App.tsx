@@ -305,12 +305,32 @@ Você pode me perguntar em palavras do seu dia a dia:
 - *"Qual é o modelo de IA mais barato para fazer acompanhamento de vendas?"*
 - *"Tenho 2 fluxos de acompanhamento: um de 1 mensagem por dia por 10 dias e outro com 2 mensagens por dia por 5 dias, quanto sai?"*
 
-Me conte como é o seu atendimento que eu calculo tudo para você!`
+Me conte como é o seu atendimento que eu calculo tudo para você!
+Você também pode **enviar arquivos** (fotos do n8n, PDFs de projetos ou tabelas) para eu analisar.`
     }
   ]);
   const [chatInput, setChatInput] = useState("");
   const [isChatLoading, setIsChatLoading] = useState(false);
+  const [chatFile, setChatFile] = useState<{ name: string; data: string; mimeType: string } | null>(null);
+  const chatFileInputRef = React.useRef<HTMLInputElement>(null);
   const chatEndRef = React.useRef<HTMLDivElement>(null);
+
+  const handleChatFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const result = event.target?.result as string;
+      const base64 = result.split(',')[1];
+      setChatFile({
+        name: file.name,
+        data: base64,
+        mimeType: file.type
+      });
+    };
+    reader.readAsDataURL(file);
+  };
 
   // Auto scroll no chat
   React.useEffect(() => {
@@ -319,11 +339,16 @@ Me conte como é o seu atendimento que eu calculo tudo para você!`
 
   const handleSendChatMessage = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!chatInput.trim() || isChatLoading) return;
+    if ((!chatInput.trim() && !chatFile) || isChatLoading) return;
 
     const userText = chatInput;
+    const currentFile = chatFile;
     setChatInput("");
-    setChatMessages(prev => [...prev, { role: "user", content: userText }]);
+    setChatFile(null);
+    setChatMessages(prev => [...prev, { 
+      role: "user", 
+      content: userText + (currentFile ? `\n\n📎 *Arquivo anexado: ${currentFile.name}*` : "") 
+    }]);
     setIsChatLoading(true);
 
     try {
@@ -352,7 +377,8 @@ Me conte como é o seu atendimento que eu calculo tudo para você!`
         },
         body: JSON.stringify({
           messages: [...chatMessages, { role: "user", content: userText }],
-          currentState
+          currentState,
+          file: currentFile
         })
       });
 
@@ -3630,26 +3656,62 @@ Como posso te ajudar hoje?`
               </div>
 
               {/* Form de Input de Mensagem */}
-              <form onSubmit={handleSendChatMessage} className="flex gap-2 pt-3">
-                <input
-                  id="chat-input-field"
-                  type="text"
-                  value={chatInput}
-                  onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Escreva sua pergunta ou passe a descrição do projeto..."
-                  disabled={isChatLoading}
-                  className={`flex-1 h-10 px-4 rounded-xl border text-xs font-semibold focus:outline-none transition-all ${themeClasses.input}`}
-                />
-                <button
-                  id="chat-submit-btn"
-                  type="submit"
-                  disabled={isChatLoading || !chatInput.trim()}
-                  className="px-4 h-10 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all cursor-pointer shrink-0"
-                >
-                  <span>Enviar</span>
-                  <ArrowRight className="h-4 w-4 stroke-[2.5]" />
-                </button>
-              </form>
+              <div className="pt-3 space-y-2">
+                {chatFile && (
+                  <div className={`flex items-center justify-between p-2 rounded-lg border ${darkMode ? "bg-slate-900/50 border-slate-800" : "bg-slate-50 border-slate-200"}`}>
+                    <div className="flex items-center gap-2 overflow-hidden">
+                      <FileText className="h-4 w-4 text-emerald-500 shrink-0" />
+                      <span className="text-[10px] font-bold text-slate-300 truncate">{chatFile.name}</span>
+                    </div>
+                    <button 
+                      type="button"
+                      onClick={() => setChatFile(null)}
+                      className="p-1 hover:bg-slate-800 rounded-full text-slate-500 hover:text-red-400 transition-colors"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                
+                <form onSubmit={handleSendChatMessage} className="flex gap-2">
+                  <input
+                    type="file"
+                    ref={chatFileInputRef}
+                    onChange={handleChatFileChange}
+                    className="hidden"
+                    accept="image/*,.pdf,.txt,.json,.csv"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => chatFileInputRef.current?.click()}
+                    disabled={isChatLoading}
+                    className={`px-3 h-10 rounded-xl border flex items-center justify-center transition-all disabled:opacity-50 ${
+                      darkMode ? "bg-slate-900 border-slate-800 text-slate-400 hover:text-white hover:border-slate-700" : "bg-white border-slate-200 text-slate-500 hover:text-slate-900"
+                    }`}
+                    title="Anexar arquivo"
+                  >
+                    <PlusCircle className="h-5 w-5" />
+                  </button>
+                  <input
+                    id="chat-input-field"
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Escreva sua pergunta ou passe a descrição do projeto..."
+                    disabled={isChatLoading}
+                    className={`flex-1 h-10 px-4 rounded-xl border text-xs font-semibold focus:outline-none transition-all ${themeClasses.input}`}
+                  />
+                  <button
+                    id="chat-submit-btn"
+                    type="submit"
+                    disabled={isChatLoading || (!chatInput.trim() && !chatFile)}
+                    className="px-4 h-10 bg-emerald-500 hover:bg-emerald-400 text-black font-extrabold text-xs rounded-xl flex items-center justify-center gap-1.5 disabled:opacity-50 transition-all cursor-pointer shrink-0"
+                  >
+                    <span>Enviar</span>
+                    <ArrowRight className="h-4 w-4 stroke-[2.5]" />
+                  </button>
+                </form>
+              </div>
             </div>
           </div>
         )}

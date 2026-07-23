@@ -113,7 +113,7 @@ Por favor, elabore um relatório consultivo conciso dividido em 3 seções curta
 // API endpoint for general AI Chat Consultation & Auto-Calculation
 app.post("/api/chat", async (req, res) => {
   try {
-    const { messages, currentState } = req.body;
+    const { messages, currentState, file } = req.body;
 
     if (!Array.isArray(messages)) {
       res.status(400).json({ error: "O parâmetro 'messages' deve ser um array." });
@@ -129,6 +129,9 @@ O seu interlocutor é um empresário, gestor comercial ou vendedor que NÃO ente
 - Fale em português de forma extremamente simples, amigável e direta, como se estivesse conversando com alguém leigo ("como se eu não soubesse de nada").
 - Evite jargões assustadores como "tokens", "API", "JSON", "Prompt Caching", "input/output" sem antes explicá-los de forma prática do mundo real (ex: "tokens são como a quantidade de palavras lidas e escritas", "cache é um desconto para quando a IA não precisa reler as regras do zero").
 - Foque sempre no RESULTADO PRÁTICO do negócio: Custo mensal em Reais (R$), custo total por cliente atendido, e quantos clientes ele consegue atender com o orçamento dele.
+
+ANÁLISE DE DOCUMENTOS E IMAGENS:
+Se o usuário enviar uma imagem (ex: print do n8n, print de CRM, tabela de custos) ou um documento (PDF, texto), você deve analisar as informações visuais ou textuais contidas no arquivo para ajudar nos cálculos. Se for um fluxo de automação, tente estimar o número de chamadas de IA e o tamanho dos prompts com base no que você vê ou lê.
 
 FUNCIONALIDADE DE APLICAR CONFIGURAÇÕES COM 1 CLIQUE:
 Se o usuário descrever o projeto dele (ex: "Atendo 30 clientes por dia no WhatsApp, trocamos umas 5 mensagens cada e tenho 1 fluxo de acompanhamento de 10 dias..."), você deve calcular os valores e, NO FINAL da sua resposta, incluir OBRIGATORIAMENTE um bloco de código JSON especial no formato abaixo para que o simulador aplique os dados no painel com 1 clique:
@@ -157,11 +160,23 @@ ${JSON.stringify(currentState || {})}
 
 Responda sempre em português brasileiro de forma amigável, clara e focada em resultados comerciais.`;
 
-    const formattedContents = messages.map((m: any) => {
+    const formattedContents = messages.map((m: any, index: number) => {
       const role = m.role === "assistant" ? "model" : m.role;
+      const parts: any[] = [{ text: m.content || "" }];
+      
+      // Se for a última mensagem do usuário e houver um arquivo, anexa
+      if (index === messages.length - 1 && role === "user" && file) {
+        parts.push({
+          inlineData: {
+            mimeType: file.mimeType,
+            data: file.data
+          }
+        });
+      }
+
       return {
         role,
-        parts: [{ text: m.content || "" }]
+        parts
       };
     });
 
